@@ -1,6 +1,7 @@
 {
-  "name": "spikemv-dashboard",
+  "name": "spikemv-weltrade-dashboard",
   "version": "1.0.0",
+  "description": "SpikeMV Live Weltrade GainX & PainX Analytics Dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
