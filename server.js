@@ -10,27 +10,44 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store latest market data for all Weltrade GainX & PainX symbols
+// Store latest market data for all Weltrade symbols (Key stored in UPPERCASE)
 let marketStore = {};
+
+// Socket connection event
+io.on('connection', (socket) => {
+    console.log('⚡ New Client Connected to Dashboard');
+    // Send currently stored data immediately upon connection
+    socket.emit('market_update', { allPairs: marketStore });
+});
 
 // MT5 WebRequest API Endpoint
 app.post('/api/update', (req, res) => {
     const data = req.body;
     if (data && data.symbol) {
-        // Save data for the specific Weltrade symbol
-        marketStore[data.symbol] = data;
-        console.log(`✅ WebRequest Received from Weltrade MT5: ${data.symbol} | Trend: ${data.trend}`);
+        const cleanSymbol = data.symbol.toUpperCase().trim();
+        marketStore[cleanSymbol] = {
+            ...data,
+            symbol: cleanSymbol,
+            updatedAt: new Date().getTime()
+        };
         
-        // Broadcast updated state to Web Dashboard
+        console.log(`✅ MT5 WebRequest Received: ${cleanSymbol} | Price: ${data.price}`);
+        
+        // Broadcast all stored pairs to all connected dashboards
         io.emit('market_update', {
-            latest: data,
+            latest: marketStore[cleanSymbol],
             allPairs: marketStore
         });
     }
-    res.status(200).json({ status: "success", message: "Weltrade data broadcasted" });
+    res.status(200).json({ status: "success", message: "Data broadcasted successfully" });
 });
 
-// Health Check route for cron-job.org auto-ping
+// Endpoint to fetch current memory store manually
+app.get('/api/state', (req, res) => {
+    res.status(200).json(marketStore);
+});
+
+// Health Check route for cron-job.org
 app.get('/health', (req, res) => {
     res.status(200).send("SpikeMV Backend Active");
 });
