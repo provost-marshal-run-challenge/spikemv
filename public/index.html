@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="dv" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpikeMV Live Analytics Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    @font-family {
+      font-family: 'Faruma';
+      src: url('https://cdn.jsdelivr.net/gh/muralm/dhivehi-fonts/Faruma.ttf') format('truetype');
+    }
+    body, html {
+      font-family: 'Faruma', 'MV Boli', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+  <div class="max-w-6xl mx-auto space-y-6">
+    <header class="flex flex-col md:flex-row justify-between items-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+      <div>
+        <h1 class="text-3xl font-bold text-amber-400">⚡ SpikeMV Live Analytics</h1>
+        <p class="text-slate-400 text-sm mt-1">ޒަމާނީ M30 މާކެޓް އެނަލިސިސް އަދި ދިވެހި އިރުޝާދު</p>
+      </div>
+      <div class="mt-4 md:mt-0 flex items-center space-x-3 space-x-reverse">
+        <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
+        <span class="text-emerald-400 text-sm font-semibold">Socket.io Connected</span>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-lg">
+        <div class="flex justify-between items-center mb-4 px-2">
+          <h2 class="text-xl font-bold text-slate-200" id="symbolTitle">GAIN1200 (M30 Timeframe)</h2>
+          <span class="bg-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-full font-mono" id="trendBadge">STRONG UPTREND</span>
+        </div>
+        <div id="chartContainer" class="w-full h-[380px] rounded-lg overflow-hidden border border-slate-700"></div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+          <h3 class="text-amber-400 font-bold text-lg mb-3">💡 ލައިވް އިރުޝާދު</h3>
+          <p id="dhivehiText" class="text-slate-200 text-lg leading-relaxed bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+            🔥 ސްޕައިކް ޖެހުމުގެ ފުރުސަތު ބޮޑު! Buy Entry އަކަށް ވަރަށް ރަނގަޅު.
+          </p>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg space-y-4">
+          <div class="flex justify-between items-center pb-3 border-b border-slate-700">
+            <span class="text-slate-400">Historical Win Rate:</span>
+            <span class="text-emerald-400 font-bold text-lg" id="winRateVal">84%</span>
+          </div>
+          <div class="flex justify-between items-center pb-3 border-b border-slate-700">
+            <span class="text-slate-400">RSI Indicator:</span>
+            <span class="text-slate-200 font-bold" id="rsiVal">48.5</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">Predictive Score:</span>
+            <span class="text-amber-400 font-bold" id="scoreVal">4.5 / 5.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const chart = LightweightCharts.createChart(document.getElementById('chartContainer'), {
+      layout: { backgroundColor: '#0f172a', textColor: '#cbd5e1' },
+      grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } }
+    });
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#22c55e', downColor: '#ef4444',
+      borderUpColor: '#22c55e', borderDownColor: '#ef4444'
+    });
+
+    socket.on('market_update', (data) => {
+      document.getElementById('symbolTitle').innerText = `${data.symbol} (M30 Timeframe)`;
+      document.getElementById('trendBadge').innerText = data.trend;
+      document.getElementById('dhivehiText').innerText = data.suggestion;
+      document.getElementById('rsiVal').innerText = data.rsi;
+      document.getElementById('winRateVal').innerText = data.winRate;
+    });
+  </script>
+</body>
+</html>
