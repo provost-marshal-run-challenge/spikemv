@@ -17,26 +17,26 @@
       color: #f8fafc;
     }
 
-    /* Continuous Left to Right Marquee Animation */
+    /* Continuous Slow Left to Right Marquee Animation (45 Seconds) */
     @keyframes marqueeLeftToRight {
       0% { transform: translateX(-100%); }
       100% { transform: translateX(100%); }
     }
-    .animate-marquee-ltr {
+    .animate-marquee-slow {
       display: inline-block;
       white-space: nowrap;
-      animation: marqueeLeftToRight 15s linear infinite;
+      animation: marqueeLeftToRight 45s linear infinite;
     }
   </style>
 </head>
 <body class="min-h-screen p-3 sm:p-6 flex flex-col items-center justify-start space-y-4 overflow-x-hidden">
 
-  <!-- Compact Top Alert Bar (Moves Left to Right & Auto Closes in 30s) -->
-  <div id="topNotificationBar" class="hidden w-full max-w-2xl bg-amber-500/20 border-y-2 border-amber-500 py-2 px-4 shadow-2xl relative overflow-hidden rounded-xl">
-    <button onclick="dismissAlert()" class="absolute top-1 left-2 z-20 text-amber-300 font-bold text-xs bg-slate-900/80 hover:bg-slate-900 px-2 py-0.5 rounded border border-amber-500/40">✕</button>
+  <!-- Compact Top Alert Bar (Moves SLOWLY Left to Right & Auto Closes in 30s) -->
+  <div id="topNotificationBar" class="hidden w-full max-w-2xl bg-amber-500/20 border-y-2 border-amber-500 py-2.5 px-4 shadow-2xl relative overflow-hidden rounded-xl">
+    <button onclick="dismissAlert()" class="absolute top-1.5 left-2 z-20 text-amber-300 font-bold text-xs bg-slate-900/90 hover:bg-slate-900 px-2 py-0.5 rounded border border-amber-500/40">✕</button>
     
     <div class="w-full overflow-hidden flex items-center justify-center">
-      <div id="marqueeContainer" class="animate-marquee-ltr text-amber-300 font-bold text-xs sm:text-sm tracking-wide dir-ltr">
+      <div id="marqueeContainer" class="animate-marquee-slow text-amber-300 font-bold text-sm sm:text-base tracking-wide dir-ltr">
         <!-- Live moving text inserted dynamically -->
       </div>
     </div>
@@ -256,7 +256,7 @@
       else el.className = "font-bold text-slate-400";
     }
 
-    // Dynamic Left-To-Right Marquee Alert System (30-second Auto Close)
+    // Dynamic Slow Marquee Alert System (45-second animation speed, 30-second Auto Close)
     function checkGlobalUrgentAlerts() {
       let readyPairs = [];
       Object.keys(allMarketData).forEach(key => {
