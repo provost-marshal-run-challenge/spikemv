@@ -59,7 +59,7 @@
       </div>
     </div>
 
-    <!-- Analytics Section (Without Chart) -->
+    <!-- Analytics Section -->
     <div class="space-y-6">
       
       <!-- Dhivehi Suggestion Card -->
@@ -123,9 +123,17 @@
     }
 
     function updateUI() {
-      const matchedKey = Object.keys(allMarketData).find(
-        key => key.toUpperCase().includes(currentSymbol) || currentSymbol.includes(key.toUpperCase())
-      );
+      // Advanced matching: Check numbers and uppercase patterns
+      const targetNum = currentSymbol.replace(/\D/g, ''); // Extract 400, 600, etc.
+      const isGain = currentSymbol.includes('GAIN');
+      const isPain = currentSymbol.includes('PAIN');
+
+      const matchedKey = Object.keys(allMarketData).find(key => {
+        const k = key.toUpperCase();
+        const hasSameNum = targetNum ? k.includes(targetNum) : true;
+        const matchesType = (isGain && k.includes('GAIN')) || (isPain && k.includes('PAIN'));
+        return matchesType && hasSameNum;
+      });
 
       const data = matchedKey ? allMarketData[matchedKey] : null;
 
