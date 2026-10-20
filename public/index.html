@@ -101,20 +101,40 @@
     let currentSymbol = "GAINX1200";
     let allMarketData = {};
 
-    // Initial state fetch
+    // Initial state fetch from Server REST API
     fetch('/api/state')
       .then(res => res.json())
       .then(data => {
-        allMarketData = data || {};
+        storeData(data);
         updateUI();
       }).catch(err => console.log('State Fetch Error:', err));
 
     socket.on('market_update', (payload) => {
-      if (payload && payload.allPairs) {
-        allMarketData = payload.allPairs;
+      if (payload) {
+        if (payload.allPairs) {
+          storeData(payload.allPairs);
+        } else if (payload.symbol) {
+          storeSingleData(payload);
+        } else if (payload.latest && payload.latest.symbol) {
+          storeSingleData(payload.latest);
+        }
         updateUI();
       }
     });
+
+    function storeData(dataObj) {
+      if (!dataObj) return;
+      Object.keys(dataObj).forEach(key => {
+        storeSingleData(dataObj[key]);
+      });
+    }
+
+    function storeSingleData(item) {
+      if (item && item.symbol) {
+        const cleanKey = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        allMarketData[cleanKey] = item;
+      }
+    }
 
     function switchSymbol(symbol) {
       currentSymbol = symbol.toUpperCase().trim();
@@ -123,25 +143,14 @@
     }
 
     function updateUI() {
-      // Advanced matching: Check numbers and uppercase patterns
-      const targetNum = currentSymbol.replace(/\D/g, ''); // Extract 400, 600, etc.
-      const isGain = currentSymbol.includes('GAIN');
-      const isPain = currentSymbol.includes('PAIN');
-
-      const matchedKey = Object.keys(allMarketData).find(key => {
-        const k = key.toUpperCase();
-        const hasSameNum = targetNum ? k.includes(targetNum) : true;
-        const matchesType = (isGain && k.includes('GAIN')) || (isPain && k.includes('PAIN'));
-        return matchesType && hasSameNum;
-      });
-
-      const data = matchedKey ? allMarketData[matchedKey] : null;
+      const cleanTarget = currentSymbol.replace(/[^A-Z0-9]/g, '');
+      const data = allMarketData[cleanTarget];
 
       if (data) {
         document.getElementById('trendBadge').innerText = data.trend || "ACTIVE";
         document.getElementById('dhivehiText').innerText = data.suggestion || "ޑޭޓާ ލިބެމުންދަނީ...";
-        document.getElementById('rsiVal').innerText = data.rsi !== undefined ? data.rsi : "--";
-        document.getElementById('priceVal').innerText = data.price !== undefined ? data.price : "--";
+        document.getElementById('rsiVal').innerText = (data.rsi !== undefined && data.rsi !== null) ? Number(data.rsi).toFixed(1) : "--";
+        document.getElementById('priceVal').innerText = (data.price !== undefined && data.price !== null) ? Number(data.price).toFixed(2) : "--";
         document.getElementById('winRateVal').innerText = data.winRate || "84%";
       } else {
         document.getElementById('dhivehiText').innerText = `⚠️ ${currentSymbol} އަށް MT5 EA އަޅާފައިވާނަމަ WebRequest މެދުވެރިކޮށް ޑޭޓާ ލިބޭނެއެވެ.`;
