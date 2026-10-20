@@ -131,6 +131,7 @@
 
     function storeSingleData(item) {
       if (item && item.symbol) {
+        // Normalize symbol key: Remove all spaces and non-alphanumeric chars
         const cleanKey = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
         allMarketData[cleanKey] = item;
       }
@@ -144,7 +145,13 @@
 
     function updateUI() {
       const cleanTarget = currentSymbol.replace(/[^A-Z0-9]/g, '');
-      const data = allMarketData[cleanTarget];
+      
+      // Robust fuzzy search for symbol matching (GainX 1200, GAINX1200, GAINX1200.m etc.)
+      const matchedKey = Object.keys(allMarketData).find(key => 
+        key === cleanTarget || key.includes(cleanTarget) || cleanTarget.includes(key)
+      );
+
+      const data = matchedKey ? allMarketData[matchedKey] : null;
 
       if (data) {
         document.getElementById('trendBadge').innerText = data.trend || "ACTIVE";
