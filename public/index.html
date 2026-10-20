@@ -16,17 +16,30 @@
       background-color: #0b1120;
       color: #f8fafc;
     }
+
+    /* Continuous Left to Right Marquee Animation */
+    @keyframes marqueeLeftToRight {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .animate-marquee-ltr {
+      display: inline-block;
+      white-space: nowrap;
+      animation: marqueeLeftToRight 15s linear infinite;
+    }
   </style>
 </head>
-<body class="min-h-screen p-3 sm:p-6 flex flex-col items-center justify-start space-y-4">
+<body class="min-h-screen p-3 sm:p-6 flex flex-col items-center justify-start space-y-4 overflow-x-hidden">
 
-  <!-- Top Active Notification Bar for Urgent Alerts -->
-  <div id="topNotificationBar" class="hidden w-full max-w-2xl bg-amber-500/20 border-2 border-amber-500 rounded-2xl p-3 sm:p-4 text-center animate-bounce shadow-2xl">
-    <div class="flex items-center justify-center space-x-2 space-x-reverse">
-      <span class="text-2xl">🚨</span>
-      <span id="notificationTitle" class="text-amber-300 font-extrabold text-base sm:text-lg">SIGNAL ALERT!</span>
+  <!-- Compact Top Alert Bar (Moves Left to Right & Auto Closes in 30s) -->
+  <div id="topNotificationBar" class="hidden w-full max-w-2xl bg-amber-500/20 border-y-2 border-amber-500 py-2 px-4 shadow-2xl relative overflow-hidden rounded-xl">
+    <button onclick="dismissAlert()" class="absolute top-1 left-2 z-20 text-amber-300 font-bold text-xs bg-slate-900/80 hover:bg-slate-900 px-2 py-0.5 rounded border border-amber-500/40">✕</button>
+    
+    <div class="w-full overflow-hidden flex items-center justify-center">
+      <div id="marqueeContainer" class="animate-marquee-ltr text-amber-300 font-bold text-xs sm:text-sm tracking-wide dir-ltr">
+        <!-- Live moving text inserted dynamically -->
+      </div>
     </div>
-    <p id="notificationMsg" class="text-slate-100 text-sm font-bold mt-1">GAINX1200 - Spike ޖަހަން އުޅެނީ! Buy Entry އަށް ތައްޔާރުވާށެވެ.</p>
   </div>
 
   <div class="w-full max-w-2xl mx-auto space-y-4">
@@ -148,6 +161,8 @@
     const socket = io();
     let currentSymbol = "GAINX1200";
     let allMarketData = {};
+    let alertTimer = null;
+    let activeAlertMsg = "";
 
     fetch('/api/state')
       .then(res => res.json())
@@ -199,7 +214,7 @@
         document.getElementById('winRateVal').innerText = data.winRate || "84%";
         document.getElementById('scoreVal').innerText = `${score} / 5.0`;
 
-        // Update Multi-Timeframe Matrix (Real-Time from MT5 Data)
+        // Update Multi-Timeframe Matrix
         updateTF('tfM1', data.tfM1 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
         updateTF('tfM5', data.tfM5 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
         updateTF('tfM15', data.tfM15 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
@@ -224,7 +239,7 @@
           actionBox.innerText = isGain ? "🎯 BUY ENTRY ނަގަން ވަރަށް ރަނގަޅު (Spike Active)" : "🎯 SELL ENTRY ނަގަން ވަރަށް ރަނގަޅު (Drop Active)";
         } else if (trend.includes('SETUP')) {
           actionBox.className = "p-3 rounded-xl font-bold text-center text-sm sm:text-base bg-amber-500/20 text-amber-400 border border-amber-500/50";
-          actionBox.innerText = "⏳ Spike / Drop အަކަށް ތައްޔާރުވަނީ (Watchlist)";
+          actionBox.innerText = "⏳ Spike / Drop އަކަށް ތައްޔާރުވަނީ (Watchlist)";
         } else {
           actionBox.className = "p-3 rounded-xl font-bold text-center text-sm sm:text-base bg-slate-900/60 text-slate-400 border border-slate-700/60";
           actionBox.innerText = "🛑 ޓްރޭޑް ނަގަން ރަނގަޅެއް ނޫން (Monitoring)";
@@ -241,24 +256,44 @@
       else el.className = "font-bold text-slate-400";
     }
 
-    // Global Notification Alert Check (Top Bar Popup)
+    // Dynamic Left-To-Right Marquee Alert System (30-second Auto Close)
     function checkGlobalUrgentAlerts() {
-      let readyPair = null;
+      let readyPairs = [];
       Object.keys(allMarketData).forEach(key => {
         const item = allMarketData[key];
         if (item && item.trend && (item.trend.includes('STRONG') || item.trend.includes('SETUP'))) {
-          readyPair = item;
+          readyPairs.push(`🚨 [${item.symbol}]: ${item.suggestion || 'READY FOR ENTRY'}`);
         }
       });
 
       const topBar = document.getElementById('topNotificationBar');
-      if (readyPair) {
-        topBar.classList.remove('hidden');
-        document.getElementById('notificationTitle').innerText = `🚨 URGENT: ${readyPair.symbol} READY FOR ENTRY!`;
-        document.getElementById('notificationMsg').innerText = readyPair.suggestion || "Spike / Drop ޖަހަން އުޅެނީ! Entry އަށް ތައްޔާރުވާށެވެ.";
+      const marquee = document.getElementById('marqueeContainer');
+      
+      if (readyPairs.length > 0) {
+        const joinedAlerts = readyPairs.join(" &nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp; ");
+        
+        if (activeAlertMsg !== joinedAlerts) {
+          activeAlertMsg = joinedAlerts;
+          marquee.innerHTML = joinedAlerts;
+          topBar.classList.remove('hidden');
+
+          if (alertTimer) clearTimeout(alertTimer);
+          
+          // Auto close after 30 seconds
+          alertTimer = setTimeout(() => {
+            topBar.classList.add('hidden');
+          }, 30000);
+        }
       } else {
         topBar.classList.add('hidden');
+        activeAlertMsg = "";
+        if (alertTimer) clearTimeout(alertTimer);
       }
+    }
+
+    function dismissAlert() {
+      document.getElementById('topNotificationBar').classList.add('hidden');
+      if (alertTimer) clearTimeout(alertTimer);
     }
   </script>
 </body>
