@@ -3,7 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
-const webpush = require('web-push');
+const admin = require('firebase-admin');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,58 +14,48 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
-// 🔑 VALID 65-BYTE EC VAPID KEYS SETUP
+// 🔥 FIREBASE ADMIN SETUP (FCM PUSH ALERTS)
 // ==========================================
-const publicVapidKey = 'BEl62iUYgUivxIkv69yViEuiBIa1o_PZZI7e2y53M9_J2M4Xk9o8Nq01q23456789abcdefghijklmnopqrstuvwxyz';
-const privateVapidKey = 'aBC1234567890_YourPrivateKeyHere_xyz987654321';
-
-try {
-  webpush.setVapidDetails(
-    'mailto:admin@spikemv.com',
-    publicVapidKey,
-    privateVapidKey
-  );
-  console.log('✅ VAPID Keys Setup Successfully!');
-} catch (err) {
-  console.error('❌ VAPID Setup Error:', err.message);
-}
-
-let subscriptions = [];
-
-// Fetch VAPID public key
-app.get('/api/vapid-public-key', (req, res) => {
-  res.json({ publicKey: publicVapidKey });
+// Initialize Firebase Admin with project ID
+admin.initializeApp({
+  projectId: "spike-mv"
 });
 
-// Register subscription
+let fcmTokens = [];
+
+// Register FCM Push Token from Frontend
 app.post('/api/subscribe', (req, res) => {
-  const subscription = req.body;
-  if (subscription && subscription.endpoint) {
-    if (!subscriptions.some(sub => sub.endpoint === subscription.endpoint)) {
-      subscriptions.push(subscription);
+  const { fcmToken } = req.body;
+  if (fcmToken) {
+    if (!fcmTokens.includes(fcmToken)) {
+      fcmTokens.push(fcmToken);
+      console.log('✅ New FCM Token Subscribed:', fcmToken);
     }
     res.status(201).json({ status: 'subscribed' });
   } else {
-    res.status(400).json({ error: 'Invalid subscription object' });
+    res.status(400).json({ error: 'Invalid FCM token' });
   }
 });
 
-// Send Push Notification
+// Helper Function: Send Push Alert via Firebase FCM
 function sendSpikePushNotification(signalData) {
-  const payload = JSON.stringify({
-    title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
-    body: signalData.suggestion || 'High Probability Pre-Spike Active!',
-    icon: '/icon-192.png',
-    data: { url: 'https://spikemv.com/signals' }
-  });
+  if (fcmTokens.length === 0) return;
 
-  subscriptions.forEach((sub, index) => {
-    webpush.sendNotification(sub, payload).catch(err => {
-      if (err.statusCode === 410 || err.statusCode === 404) {
-        subscriptions.splice(index, 1);
-      }
+  const message = {
+    notification: {
+      title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
+      body: signalData.suggestion || 'High Probability Pre-Spike Active!'
+    },
+    tokens: fcmTokens
+  };
+
+  admin.messaging().sendMulticast(message)
+    .then(response => {
+      console.log(`🚀 FCM Push Alerts sent: ${response.successCount} successful`);
+    })
+    .catch(error => {
+      console.error('❌ FCM Send Error:', error);
     });
-  });
 }
 
 // ==========================================
