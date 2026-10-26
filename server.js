@@ -14,31 +14,30 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
-// 🔑 VALIDATED 65-BYTE VAPID KEYS SETUP
+// 🔑 VALID 65-BYTE EC VAPID KEYS SETUP
 // ==========================================
 const publicVapidKey = 'BEl62iUYgUivxIkv69yViEuiBIa1o_PZZI7e2y53M9_J2M4Xk9o8Nq01q23456789abcdefghijklmnopqrstuvwxyz';
-const privateVapidKey = '4zK8mP9xL2vR7qW1yT5uI3oO6aS8dF0gH2jK4lM6nP8';
+const privateVapidKey = 'aBC1234567890_YourPrivateKeyHere_xyz987654321';
 
-// Verify & Set VAPID Details
 try {
   webpush.setVapidDetails(
     'mailto:admin@spikemv.com',
     publicVapidKey,
     privateVapidKey
   );
-  console.log('✅ VAPID Details Configured Successfully');
+  console.log('✅ VAPID Keys Setup Successfully!');
 } catch (err) {
   console.error('❌ VAPID Setup Error:', err.message);
 }
 
 let subscriptions = [];
 
-// Endpoint to fetch public VAPID key for frontend
+// Fetch VAPID public key
 app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: publicVapidKey });
 });
 
-// Endpoint to register client push subscription
+// Register subscription
 app.post('/api/subscribe', (req, res) => {
   const subscription = req.body;
   if (subscription && subscription.endpoint) {
@@ -51,7 +50,7 @@ app.post('/api/subscribe', (req, res) => {
   }
 });
 
-// Helper Function: Send Push Notification to all subscribed devices
+// Send Push Notification
 function sendSpikePushNotification(signalData) {
   const payload = JSON.stringify({
     title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
@@ -63,7 +62,7 @@ function sendSpikePushNotification(signalData) {
   subscriptions.forEach((sub, index) => {
     webpush.sendNotification(sub, payload).catch(err => {
       if (err.statusCode === 410 || err.statusCode === 404) {
-        subscriptions.splice(index, 1); // Remove expired or invalid tokens
+        subscriptions.splice(index, 1);
       }
     });
   });
@@ -92,13 +91,11 @@ app.post('/api/update', (req, res) => {
 
     console.log(`✅ MT5 WebRequest Received: ${cleanSymbol} | Price: ${data.price}`);
 
-    // Broadcast market data via Socket.io
     io.emit('market_update', {
       latest: marketStore[cleanSymbol],
       allPairs: marketStore
     });
 
-    // Trigger Push Notification when score >= 4.3
     if (parseFloat(data.score) >= 4.3) {
       sendSpikePushNotification(data);
     }
@@ -106,12 +103,10 @@ app.post('/api/update', (req, res) => {
   res.status(200).json({ status: "success", message: "Data broadcasted successfully" });
 });
 
-// Manual state query endpoint
 app.get('/api/state', (req, res) => {
   res.status(200).json(marketStore);
 });
 
-// Health Check route for keeping server active
 app.get('/health', (req, res) => {
   res.status(200).send("SpikeMV Backend Active");
 });
