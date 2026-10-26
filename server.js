@@ -16,7 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ==========================================
 // 🔑 VAPID KEYS & WEB PUSH SETUP
 // ==========================================
-const publicVapidKey = 'BEl62iUYgUivxIkv69yViEuiBIa1o_PZZI7e2y53M9_J2M4Xk9o8Nq01q23456789abcdefghijklmnopqrstuvwxyz';
+const publicVapidKey = 'BFmKk2Nmsv8GkYt8QjE3q3vQ0XyL1mN4P5q6R7s8T9u0V1w2X3y4Z5a6B7c8D9e0F1g2H3i4J5k6L7m8N9o0P1';
 const privateVapidKey = '4zK8mP9xL2vR7qW1yT5uI3oO6aS8dF0gH2jK4lM6nP8';
 
 webpush.setVapidDetails(
@@ -27,7 +27,7 @@ webpush.setVapidDetails(
 
 let subscriptions = [];
 
-// Endpoint to fetch public VAPID key (Fixes Lovable Dashboard missing key error)
+// Endpoint to fetch public VAPID key
 app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: publicVapidKey });
 });
@@ -45,7 +45,7 @@ app.post('/api/subscribe', (req, res) => {
   }
 });
 
-// Helper Function: Send Push Notification to all subscribed phones
+// Send Push Notification
 function sendSpikePushNotification(signalData) {
   const payload = JSON.stringify({
     title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
@@ -57,7 +57,7 @@ function sendSpikePushNotification(signalData) {
   subscriptions.forEach((sub, index) => {
     webpush.sendNotification(sub, payload).catch(err => {
       if (err.statusCode === 410 || err.statusCode === 404) {
-        subscriptions.splice(index, 1); // Remove invalid or expired token
+        subscriptions.splice(index, 1);
       }
     });
   });
@@ -86,13 +86,11 @@ app.post('/api/update', (req, res) => {
         
         console.log(`✅ MT5 WebRequest Received: ${cleanSymbol} | Price: ${data.price}`);
         
-        // Broadcast all stored pairs via Socket.io
         io.emit('market_update', {
             latest: marketStore[cleanSymbol],
             allPairs: marketStore
         });
 
-        // Trigger Push Notification if Predictive Score >= 4.3
         if (parseFloat(data.score) >= 4.3) {
             sendSpikePushNotification(data);
         }
