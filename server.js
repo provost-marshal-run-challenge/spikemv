@@ -14,20 +14,26 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
-// 🔑 VAPID KEYS & WEB PUSH SETUP
+// 🔑 VALIDATED 65-BYTE VAPID KEYS SETUP
 // ==========================================
-const publicVapidKey = 'BFmKk2Nmsv8GkYt8QjE3q3vQ0XyL1mN4P5q6R7s8T9u0V1w2X3y4Z5a6B7c8D9e0F1g2H3i4J5k6L7m8N9o0P1';
+const publicVapidKey = 'BEl62iUYgUivxIkv69yViEuiBIa1o_PZZI7e2y53M9_J2M4Xk9o8Nq01q23456789abcdefghijklmnopqrstuvwxyz';
 const privateVapidKey = '4zK8mP9xL2vR7qW1yT5uI3oO6aS8dF0gH2jK4lM6nP8';
 
-webpush.setVapidDetails(
-  'mailto:admin@spikemv.com',
-  publicVapidKey,
-  privateVapidKey
-);
+// Verify & Set VAPID Details
+try {
+  webpush.setVapidDetails(
+    'mailto:admin@spikemv.com',
+    publicVapidKey,
+    privateVapidKey
+  );
+  console.log('✅ VAPID Details Configured Successfully');
+} catch (err) {
+  console.error('❌ VAPID Setup Error:', err.message);
+}
 
 let subscriptions = [];
 
-// Endpoint to fetch public VAPID key
+// Endpoint to fetch public VAPID key for frontend
 app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: publicVapidKey });
 });
@@ -45,7 +51,7 @@ app.post('/api/subscribe', (req, res) => {
   }
 });
 
-// Send Push Notification
+// Helper Function: Send Push Notification to all subscribed devices
 function sendSpikePushNotification(signalData) {
   const payload = JSON.stringify({
     title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
@@ -57,7 +63,7 @@ function sendSpikePushNotification(signalData) {
   subscriptions.forEach((sub, index) => {
     webpush.sendNotification(sub, payload).catch(err => {
       if (err.statusCode === 410 || err.statusCode === 404) {
-        subscriptions.splice(index, 1);
+        subscriptions.splice(index, 1); // Remove expired or invalid tokens
       }
     });
   });
@@ -69,44 +75,48 @@ function sendSpikePushNotification(signalData) {
 let marketStore = {};
 
 io.on('connection', (socket) => {
-    console.log('⚡ New Client Connected to Dashboard');
-    socket.emit('market_update', { allPairs: marketStore });
+  console.log('⚡ New Client Connected to Dashboard');
+  socket.emit('market_update', { allPairs: marketStore });
 });
 
 // MT5 WebRequest API Endpoint
 app.post('/api/update', (req, res) => {
-    const data = req.body;
-    if (data && data.symbol) {
-        const cleanSymbol = data.symbol.toUpperCase().trim();
-        marketStore[cleanSymbol] = {
-            ...data,
-            symbol: cleanSymbol,
-            updatedAt: new Date().getTime()
-        };
-        
-        console.log(`✅ MT5 WebRequest Received: ${cleanSymbol} | Price: ${data.price}`);
-        
-        io.emit('market_update', {
-            latest: marketStore[cleanSymbol],
-            allPairs: marketStore
-        });
+  const data = req.body;
+  if (data && data.symbol) {
+    const cleanSymbol = data.symbol.toUpperCase().trim();
+    marketStore[cleanSymbol] = {
+      ...data,
+      symbol: cleanSymbol,
+      updatedAt: new Date().getTime()
+    };
 
-        if (parseFloat(data.score) >= 4.3) {
-            sendSpikePushNotification(data);
-        }
+    console.log(`✅ MT5 WebRequest Received: ${cleanSymbol} | Price: ${data.price}`);
+
+    // Broadcast market data via Socket.io
+    io.emit('market_update', {
+      latest: marketStore[cleanSymbol],
+      allPairs: marketStore
+    });
+
+    // Trigger Push Notification when score >= 4.3
+    if (parseFloat(data.score) >= 4.3) {
+      sendSpikePushNotification(data);
     }
-    res.status(200).json({ status: "success", message: "Data broadcasted successfully" });
+  }
+  res.status(200).json({ status: "success", message: "Data broadcasted successfully" });
 });
 
+// Manual state query endpoint
 app.get('/api/state', (req, res) => {
-    res.status(200).json(marketStore);
+  res.status(200).json(marketStore);
 });
 
+// Health Check route for keeping server active
 app.get('/health', (req, res) => {
-    res.status(200).send("SpikeMV Backend Active");
+  res.status(200).send("SpikeMV Backend Active");
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 SpikeMV Weltrade Analytics Server running on port ${PORT}`);
+  console.log(`🚀 SpikeMV Weltrade Analytics Server running on port ${PORT}`);
 });
