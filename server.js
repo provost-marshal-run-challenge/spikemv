@@ -3,10 +3,14 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve Static Frontend HTML Files from 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -34,14 +38,17 @@ if (!admin.apps.length) {
 // Global Market State Tracker
 let latestMarketState = {};
 
-// MT5 Data Endpoint
+// MT5 WebRequest Feed Endpoint
 app.post('/api/update-feed', (req, res) => {
   const data = req.body;
   if (data && data.symbol) {
-    latestMarketState[data.symbol] = data;
-    io.emit('market_update', data); // Broadcast live to dashboard
+    const cleanSym = data.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    latestMarketState[cleanSym] = data;
+    
+    // Broadcast live to socket clients
+    io.emit('market_update', { symbol: cleanSym, latest: data, allPairs: latestMarketState });
 
-    // Push alert for score >= 4.3
+    // Push alert for high predictive score signals
     if (data.score >= 4.3 && data.fcmTokens) {
       triggerPushNotification(data, data.fcmTokens);
     }
@@ -49,14 +56,19 @@ app.post('/api/update-feed', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
 
-// REST Endpoint for Lovable Dashboard
+// REST Endpoint for Lovable & Web Dashboard
 app.get('/api/state', (req, res) => {
   res.json(latestMarketState);
 });
 
-// Root Health Check
-app.get('/', (req, res) => {
+// Root Health Check Route
+app.get('/health', (req, res) => {
   res.send("SpikeMV Live Feed Engine Running!");
+});
+
+// Fallback route to serve index.html for any frontend navigation
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Socket.io Connection Logic
