@@ -1,34 +1,34 @@
+const express = require('express');
 const admin = require('firebase-admin');
 
-// Render Environment Variable އިން Firebase Admin Initialize ކުރުން
+const app = express();
+app.use(express.json());
+
+// Firebase Admin Setup
 if (!admin.apps.length) {
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-    console.log("✅ Firebase Admin SDK Initialized Successfully!");
+    const rawAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (rawAccount) {
+      const serviceAccount = JSON.parse(rawAccount);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      console.log("✅ Firebase Admin SDK Initialized Successfully!");
+    } else {
+      console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT environment variable is missing!");
+    }
   } catch (error) {
     console.error("❌ Firebase Admin Initialization Error:", error);
   }
 }
 
-// Signal Active ވުމުން ފޯނުތަކަށް Push Notification ފޮނުވާ Function
-async function triggerPushNotification(signalData, fcmTokens) {
-  if (!fcmTokens || fcmTokens.length === 0) return;
+// MT5 WebRequest & Health Check Route
+app.get('/', (req, res) => {
+  res.send("SpikeMV Backend Active!");
+});
 
-  const message = {
-    notification: {
-      title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
-      body: signalData.suggestion || 'High Probability Pre-Spike Active!'
-    },
-    tokens: fcmTokens
-  };
-
-  try {
-    const response = await admin.messaging().sendEachForMulticast(message);
-    console.log(`🚀 FCM Push Alerts sent: ${response.successCount} successful`);
-  } catch (error) {
-    console.error("❌ FCM Send Error:", error);
-  }
-}
+// ⚠️ މުހިންމު ބައި: ސާވަރު ނިވިގެން ނުދާ ގޮތަށް Port Listen ކުރުވުން
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🚀 SpikeMV Server running on port ${PORT}`);
+});
