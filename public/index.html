@@ -16,8 +16,6 @@
       background-color: #0b1120;
       color: #f8fafc;
     }
-
-    /* Continuous Slow Left to Right Marquee Animation (45 Seconds) */
     @keyframes marqueeLeftToRight {
       0% { transform: translateX(-100%); }
       100% { transform: translateX(100%); }
@@ -31,20 +29,18 @@
 </head>
 <body class="min-h-screen p-3 sm:p-6 flex flex-col items-center justify-start space-y-4 overflow-x-hidden">
 
-  <!-- Compact Top Alert Bar (Moves SLOWLY Left to Right & Auto Closes in 30s) -->
+  <!-- Compact Top Alert Bar -->
   <div id="topNotificationBar" class="hidden w-full max-w-2xl bg-amber-500/20 border-y-2 border-amber-500 py-2.5 px-4 shadow-2xl relative overflow-hidden rounded-xl">
     <button onclick="dismissAlert()" class="absolute top-1.5 left-2 z-20 text-amber-300 font-bold text-xs bg-slate-900/90 hover:bg-slate-900 px-2 py-0.5 rounded border border-amber-500/40">✕</button>
     
     <div class="w-full overflow-hidden flex items-center justify-center">
       <div id="marqueeContainer" class="animate-marquee-slow text-amber-300 font-bold text-sm sm:text-base tracking-wide dir-ltr">
-        <!-- Live moving text inserted dynamically -->
       </div>
     </div>
   </div>
 
   <div class="w-full max-w-2xl mx-auto space-y-4">
     
-    <!-- Professional Mobile Header -->
     <header class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 sm:p-6 text-center shadow-2xl">
       <div class="flex items-center justify-center space-x-2 space-x-reverse mb-1">
         <span class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
@@ -54,7 +50,7 @@
       <p class="text-slate-400 text-xs sm:text-sm mt-1">Smart Money Concepts & Multi-Timeframe Analytics</p>
     </header>
 
-    <!-- Pair Selector dropdown -->
+    <!-- Pair Selector -->
     <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl flex flex-col items-center justify-center text-center space-y-2">
       <label class="text-amber-400 font-bold text-base sm:text-lg">Weltrade Pair Select ކުރައްވާ:</label>
       <select id="symbolSelect" onchange="switchSymbol(this.value)" class="w-full max-w-xs bg-slate-900 text-slate-100 font-bold px-4 py-2.5 rounded-xl border-2 border-amber-500/60 text-center text-base focus:outline-none focus:border-amber-400 cursor-pointer shadow-inner">
@@ -78,7 +74,7 @@
       </div>
     </div>
 
-    <!-- Multi-Timeframe Trend Matrix (M1 -> MN1) -->
+    <!-- Multi-Timeframe Matrix -->
     <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl text-center space-y-2">
       <h3 class="text-amber-400 font-bold text-sm sm:text-base mb-2">📊 Multi-Timeframe Trend Matrix</h3>
       <div class="grid grid-cols-4 sm:grid-cols-8 gap-2 font-mono text-xs">
@@ -93,10 +89,9 @@
       </div>
     </div>
 
-    <!-- Institutional Smart Money Structure Breakdown -->
+    <!-- SMC Breakdown -->
     <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 shadow-xl space-y-3">
       <h3 class="text-amber-400 font-bold text-base border-b border-slate-700 pb-2 text-center sm:text-right">🧠 Smart Money Concept (SMC) Structure</h3>
-      
       <div class="space-y-2 text-sm">
         <div class="flex justify-between items-center bg-slate-900/60 p-3 rounded-lg border border-slate-700/60">
           <span class="text-slate-400">މާކެޓްގެ މިހާރުގެ ޒޯން (Market Zone):</span>
@@ -117,25 +112,23 @@
       </div>
     </div>
 
-    <!-- Live Trade Decision & Action Container -->
+    <!-- Live Decision Box -->
     <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 shadow-xl text-center space-y-3">
       <div class="flex justify-between items-center pb-2 border-b border-slate-700/60">
         <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Direct Entry Decision</span>
         <span class="bg-slate-900 text-emerald-400 text-xs px-3 py-1 rounded-full font-mono border border-slate-700" id="trendBadge">WAITING FOR MT5</span>
       </div>
-
       <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80">
         <p id="dhivehiText" class="text-slate-100 text-lg sm:text-xl font-medium leading-relaxed">
           މާކެޓް ސިގްނަލަކަށް އިންތިޒާރުކުރެވެނީ...
         </p>
       </div>
-
       <div id="actionContainer" class="p-3 rounded-xl font-bold text-center text-sm sm:text-base bg-slate-900/40 text-slate-400 border border-slate-700/40">
         ނިންމުން: މާކެޓް އެނަލައިޒް ކުރެވެނީ...
       </div>
     </div>
 
-    <!-- Numerical Metrics -->
+    <!-- Metrics -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-3 text-center">
         <span class="text-slate-400 text-xs block mb-1">Live Price</span>
@@ -214,7 +207,6 @@
         document.getElementById('winRateVal').innerText = data.winRate || "84%";
         document.getElementById('scoreVal').innerText = `${score} / 5.0`;
 
-        // Update Multi-Timeframe Matrix
         updateTF('tfM1', data.tfM1 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
         updateTF('tfM5', data.tfM5 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
         updateTF('tfM15', data.tfM15 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
@@ -224,13 +216,11 @@
         updateTF('tfD1', data.tfD1 || 'BUY');
         updateTF('tfW1', data.tfW1 || 'BUY');
 
-        // Update SMC Technical Concepts
         document.getElementById('marketZone').innerText = data.zone || "Fair Value Gap (FVG) ގައި";
         document.getElementById('obStatus').innerText = data.ob || "Order Block (OB) އަށް Retrace ވަނީ";
         document.getElementById('liqStatus').innerText = data.liq || "Liquidity Sweep ފުރިހަމަވެއްޖެ";
         document.getElementById('retractStatus').innerText = data.retract || "61.8% OTE Zone ގައި";
 
-        // Action Decision Box
         const isGain = currentSymbol.includes('GAIN');
         const actionBox = document.getElementById('actionContainer');
 
@@ -256,7 +246,6 @@
       else el.className = "font-bold text-slate-400";
     }
 
-    // Dynamic Slow Marquee Alert System (45-second animation speed, 30-second Auto Close)
     function checkGlobalUrgentAlerts() {
       let readyPairs = [];
       Object.keys(allMarketData).forEach(key => {
@@ -279,7 +268,6 @@
 
           if (alertTimer) clearTimeout(alertTimer);
           
-          // Auto close after 30 seconds
           alertTimer = setTimeout(() => {
             topBar.classList.add('hidden');
           }, 30000);
