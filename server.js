@@ -65,7 +65,9 @@ async function triggerPushNotification(item) {
                          trendStr.includes('STRONG') || 
                          trendStr.includes('ACTIVE') || 
                          suggestionStr.includes('ACTIVE') ||
-                         suggestionStr.includes('BREAKOUT');
+                         suggestionStr.includes('BREAKOUT') ||
+                         suggestionStr.includes('SPIKE') ||
+                         suggestionStr.includes('DROP');
 
   if (!isSignalActive) return;
 
@@ -109,11 +111,10 @@ app.post('/api/update-feed', (req, res) => {
     }
 
     const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const scoreNum = Number(item.score || 0);
     const rsiVal = Number(item.rsi || 50);
     const currentTime = Date.now();
 
-    // 🪙 XAUUSD (Gold) Specific Institutional SMC Logic
+    // 1. 🪙 XAUUSD (Gold) Logic - IC Markets
     if (cleanSymbol === 'XAUUSD') {
       item.broker = 'IC Markets';
       if (rsiVal <= 32.0) {
@@ -137,13 +138,54 @@ app.post('/api/update-feed', (req, res) => {
         item.trend = "CONSOLIDATION";
         item.suggestion = "⏳ [GOLD MONITORING]: Range-bound Market Structure";
       }
-    } else {
+    } 
+    // 2. 🎯 Deriv Boom & Crash Indices Logic
+    else if (cleanSymbol.includes('BOOM') || cleanSymbol.includes('CRASH')) {
+      item.broker = 'Deriv';
+      
+      const isBoom = cleanSymbol.includes('BOOM');
+      const isCrash = cleanSymbol.includes('CRASH');
+
+      if (isBoom) {
+        if (rsiVal <= 28.0) {
+          item.score = 4.9;
+          item.trend = "STRONG SPIKE ZONE";
+          item.suggestion = `⚡ [${cleanSymbol} BUY SPIKE ACTIVE]: Oversold Zone! High Probability Buy Spike`;
+        } else if (rsiVal <= 38.0) {
+          item.score = 3.8;
+          item.trend = "SPIKE SETUP BUILDING";
+          item.suggestion = `⏳ [${cleanSymbol} WATCHLIST]: Approaching Spike Support Zone`;
+        } else {
+          item.score = 2.0;
+          item.trend = "MONITORING";
+          item.suggestion = "⏳ Analyzing Market Structure...";
+        }
+      } else if (isCrash) {
+        if (rsiVal >= 72.0) {
+          item.score = 4.9;
+          item.trend = "STRONG DROP ZONE";
+          item.suggestion = `⚡ [${cleanSymbol} SELL DROP ACTIVE]: Overbought Zone! High Probability Sell Drop`;
+        } else if (rsiVal >= 62.0) {
+          item.score = 3.8;
+          item.trend = "DROP SETUP BUILDING";
+          item.suggestion = `⏳ [${cleanSymbol} WATCHLIST]: Approaching Drop Resistance Zone`;
+        } else {
+          item.score = 2.0;
+          item.trend = "MONITORING";
+          item.suggestion = "⏳ Analyzing Market Structure...";
+        }
+      }
+    } 
+    // 3. 📈 Weltrade GainX & PainX Synthetic Logic
+    else {
       item.broker = 'Weltrade';
     }
 
     const isSignalActive = Number(item.score) >= 4.3 || 
                            String(item.trend).includes('STRONG') || 
-                           String(item.suggestion).includes('ACTIVE');
+                           String(item.suggestion).includes('ACTIVE') ||
+                           String(item.suggestion).includes('SPIKE') ||
+                           String(item.suggestion).includes('DROP');
 
     if (isSignalActive) {
       if (!signalActivatedTimes[cleanSymbol]) {
