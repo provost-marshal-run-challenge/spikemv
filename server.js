@@ -39,6 +39,9 @@ if (!admin.apps.length) {
 let latestMarketState = {};
 let subscribedTokens = new Set();
 
+// ⏳ Notification Spam Control Tracker (Track last alert time per pair)
+let lastNotifiedState = {};
+
 // Keep-Alive Endpoint for Cron-job.org
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -64,28 +67,45 @@ app.post('/api/subscribe-alerts', (req, res) => {
 async function triggerPushNotification(item) {
   if (subscribedTokens.size === 0 || !admin.apps.length) return;
 
-  const tokensArray = Array.from(subscribedTokens);
+  const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const scoreNum = Number(item.score || 0);
-  const isHighConviction = scoreNum >= 4.3 || (item.trend && item.trend.includes('STRONG'));
+  const trendStr = String(item.trend || '').toUpperCase();
+  const currentTime = Date.now();
 
+  // 1. Strict Signal Filter: Only Active Strong Signals (Score >= 4.5 or STRONG)
+  const isHighConviction = scoreNum >= 4.5 || trendStr.includes('STRONG');
   if (!isHighConviction) return;
+
+  // 2. Cooldown Logic: Prevents duplicate notifications for the same pair within 15 minutes (900,000 ms)
+  const lastAlert = lastNotifiedState[cleanSymbol];
+  if (lastAlert && (currentTime - lastAlert.time < 15 * 60 * 1000)) {
+    return; // Skip sending duplicate notification
+  }
+
+  // Record this notification timestamp
+  lastNotifiedState[cleanSymbol] = {
+    time: currentTime,
+    score: scoreNum
+  };
+
+  const tokensArray = Array.from(subscribedTokens);
 
   const message = {
     notification: {
-      title: `🚨 SpikeMV Signal: ${item.symbol}`,
+      title: `🚨 SpikeMV Signal: ${cleanSymbol}`,
       body: `Score: ${item.score}/5.0 | ${item.suggestion || 'High Conviction Signal Active!'}`
     },
     data: {
-      symbol: String(item.symbol),
+      symbol: cleanSymbol,
       score: String(item.score),
-      trend: String(item.trend || '')
+      trend: trendStr
     },
     tokens: tokensArray
   };
 
   try {
     const response = await admin.messaging().sendEachForMulticast(message);
-    console.log(`🚀 FCM Alerts Broadcasted: ${response.successCount} successful, ${response.failureCount} failed.`);
+    console.log(`🚀 Single FCM Alert Broadcasted for ${cleanSymbol}: ${response.successCount} successful`);
   } catch (error) {
     console.error("❌ FCM Push Error:", error);
   }
@@ -109,7 +129,7 @@ app.post('/api/update-feed', (req, res) => {
       allPairs: latestMarketState
     });
 
-    // Trigger FCM Alert if signal conditions are met
+    // Trigger FCM Alert if signal conditions & cooldown rules pass
     triggerPushNotification(item);
 
     res.status(200).json({ status: 'success', symbol: cleanSymbol });
