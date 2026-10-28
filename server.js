@@ -110,13 +110,29 @@ app.post('/api/update-feed', (req, res) => {
       return res.status(400).json({ error: 'Invalid payload. Symbol required.' });
     }
 
-    const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let rawSymbol = item.symbol.toUpperCase();
+    let cleanSymbol = rawSymbol;
+
+    // Standardize Deriv Symbol Names (e.g., "BOOM 1000 INDEX" -> "BOOM 1000")
+    if (rawSymbol.includes('BOOM') || rawSymbol.includes('CRASH')) {
+      const match = rawSymbol.match(/(BOOM|CRASH)\s*(\d+)/i);
+      if (match) {
+        cleanSymbol = `${match[1]} ${match[2]}`;
+      }
+      item.broker = 'Deriv';
+    } else if (rawSymbol.includes('XAUUSD')) {
+      cleanSymbol = 'XAUUSD';
+      item.broker = 'IC Markets';
+    } else {
+      item.broker = 'Weltrade';
+    }
+
+    item.symbol = cleanSymbol;
     const rsiVal = Number(item.rsi || 50);
     const currentTime = Date.now();
 
     // 1. 🪙 XAUUSD (Gold) Logic - IC Markets
     if (cleanSymbol === 'XAUUSD') {
-      item.broker = 'IC Markets';
       if (rsiVal <= 32.0) {
         item.score = 4.9;
         item.trend = "STRONG BULLISH SMC";
@@ -140,9 +156,7 @@ app.post('/api/update-feed', (req, res) => {
       }
     } 
     // 2. 🎯 Deriv Boom & Crash Indices Logic
-    else if (cleanSymbol.includes('BOOM') || cleanSymbol.includes('CRASH')) {
-      item.broker = 'Deriv';
-      
+    else if (item.broker === 'Deriv') {
       const isBoom = cleanSymbol.includes('BOOM');
       const isCrash = cleanSymbol.includes('CRASH');
 
@@ -175,10 +189,6 @@ app.post('/api/update-feed', (req, res) => {
           item.suggestion = "⏳ Analyzing Market Structure...";
         }
       }
-    } 
-    // 3. 📈 Weltrade GainX & PainX Synthetic Logic
-    else {
-      item.broker = 'Weltrade';
     }
 
     const isSignalActive = Number(item.score) >= 4.3 || 
