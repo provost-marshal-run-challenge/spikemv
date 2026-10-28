@@ -38,9 +38,10 @@ if (!admin.apps.length) {
 // Global Market State Tracker & Subscriptions Storage
 let latestMarketState = {};
 let subscribedTokens = new Set();
-
-// ⏳ Notification Spam Control Tracker (Track last alert time per pair)
 let lastNotifiedState = {};
+
+// 🎯 Track the VERY FIRST activation timestamp per symbol
+let signalActivatedTimes = {};
 
 // Keep-Alive Endpoint for Cron-job.org
 app.get('/health', (req, res) => {
@@ -73,7 +74,6 @@ async function triggerPushNotification(item) {
   const suggestionStr = String(item.suggestion || '').toUpperCase();
   const currentTime = Date.now();
 
-  // 🎯 1. Direct Active Signal Check: Checks trend OR suggestion text OR score >= 4.0
   const isSignalActive = scoreNum >= 4.0 || 
                          trendStr.includes('STRONG') || 
                          trendStr.includes('ACTIVE') || 
@@ -82,13 +82,11 @@ async function triggerPushNotification(item) {
 
   if (!isSignalActive) return;
 
-  // ⏳ 2. Smart Cooldown (3 Minutes / 180,000 ms): Prevents spam while ensuring timely alerts
   const lastAlert = lastNotifiedState[cleanSymbol];
   if (lastAlert && (currentTime - lastAlert.time < 3 * 60 * 1000)) {
-    return; // Skip duplicate notification within 3 mins
+    return;
   }
 
-  // Record timestamp
   lastNotifiedState[cleanSymbol] = {
     time: currentTime,
     score: scoreNum
@@ -126,6 +124,28 @@ app.post('/api/update-feed', (req, res) => {
     }
 
     const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const scoreNum = Number(item.score || 0);
+    const trendStr = String(item.trend || '').toUpperCase();
+    const suggestionStr = String(item.suggestion || '').toUpperCase();
+    const currentTime = Date.now();
+
+    const isSignalActive = scoreNum >= 4.3 || 
+                           trendStr.includes('STRONG') || 
+                           suggestionStr.includes('ACTIVE') ||
+                           suggestionStr.includes('BREAKOUT');
+
+    // 🎯 Lock in the original activation time
+    if (isSignalActive) {
+      if (!signalActivatedTimes[cleanSymbol]) {
+        signalActivatedTimes[cleanSymbol] = currentTime;
+      }
+    } else {
+      // Clear timestamp when signal is no longer active
+      delete signalActivatedTimes[cleanSymbol];
+    }
+
+    // Attach original activation timestamp to item payload
+    item.firstTriggeredAt = signalActivatedTimes[cleanSymbol] || currentTime;
     latestMarketState[cleanSymbol] = item;
 
     // Real-time Socket.io Broadcast
@@ -135,7 +155,6 @@ app.post('/api/update-feed', (req, res) => {
       allPairs: latestMarketState
     });
 
-    // Trigger FCM Alert if signal conditions & cooldown rules pass
     triggerPushNotification(item);
 
     res.status(200).json({ status: 'success', symbol: cleanSymbol });
@@ -148,8 +167,6 @@ app.post('/api/update-feed', (req, res) => {
 // Socket.io Connection Logic
 io.on('connection', (socket) => {
   console.log(`⚡ Client connected to Socket.io: ${socket.id}`);
-  
-  // Send existing state to new client immediately
   socket.emit('market_update', { allPairs: latestMarketState });
 
   socket.on('disconnect', () => {
