@@ -65,7 +65,6 @@ async function triggerPushNotification(item) {
                          trendStr.includes('STRONG') || 
                          trendStr.includes('ACTIVE') || 
                          suggestionStr.includes('ACTIVE') ||
-                         suggestionStr.includes('BREAKOUT') ||
                          suggestionStr.includes('SPIKE') ||
                          suggestionStr.includes('DROP');
 
@@ -113,62 +112,52 @@ app.post('/api/update-feed', (req, res) => {
     let rawSymbol = item.symbol.toUpperCase();
     let cleanSymbol = rawSymbol;
 
-    // Standardize Deriv Symbol Names (e.g., "BOOM 1000 INDEX" -> "BOOM 1000")
+    // Standardize Deriv & Weltrade Brokers
     if (rawSymbol.includes('BOOM') || rawSymbol.includes('CRASH')) {
       const match = rawSymbol.match(/(BOOM|CRASH)\s*(\d+)/i);
       if (match) {
         cleanSymbol = `${match[1]} ${match[2]}`;
       }
       item.broker = 'Deriv';
-    } else if (rawSymbol.includes('XAUUSD')) {
-      cleanSymbol = 'XAUUSD';
-      item.broker = 'IC Markets';
     } else {
       item.broker = 'Weltrade';
     }
 
     item.symbol = cleanSymbol;
     const rsiVal = Number(item.rsi || 50);
+    const p = Number(item.price || 0);
     const currentTime = Date.now();
 
-    // 1. 🪙 XAUUSD (Gold) Logic - IC Markets
-    if (cleanSymbol === 'XAUUSD') {
-      if (rsiVal <= 32.0) {
-        item.score = 4.9;
-        item.trend = "STRONG BULLISH SMC";
-        item.suggestion = "⚡ [GOLD BUY ACTIVE]: Institutional Liquidity Sweep + Order Block Reversal!";
-      } else if (rsiVal >= 68.0) {
-        item.score = 4.9;
-        item.trend = "STRONG BEARISH SMC";
-        item.suggestion = "⚡ [GOLD SELL ACTIVE]: Institutional Bearish Order Block Breakout!";
-      } else if (rsiVal > 32.0 && rsiVal < 45.0) {
-        item.score = 3.8;
-        item.trend = "BULLISH ACCUMULATION";
-        item.suggestion = "⏳ [GOLD WATCHLIST]: Bullish Liquidity Building near Support";
-      } else if (rsiVal > 55.0 && rsiVal < 68.0) {
-        item.score = 3.8;
-        item.trend = "BEARISH DISTRIBUTION";
-        item.suggestion = "⏳ [GOLD WATCHLIST]: Bearish Liquidity Building near Resistance";
-      } else {
-        item.score = 2.5;
-        item.trend = "CONSOLIDATION";
-        item.suggestion = "⏳ [GOLD MONITORING]: Range-bound Market Structure";
-      }
-    } 
-    // 2. 🎯 Deriv Boom & Crash Indices Logic
-    else if (item.broker === 'Deriv') {
-      const isBoom = cleanSymbol.includes('BOOM');
-      const isCrash = cleanSymbol.includes('CRASH');
+    const isBoom = cleanSymbol.includes('BOOM');
+    const isCrash = cleanSymbol.includes('CRASH');
 
+    if (isBoom) {
+      item.fibonacci = rsiVal <= 35 ? "0.618 - OTE Golden Zone Active" : "0.382 Retracement Level";
+      item.orderBlock = rsiVal <= 35 ? "Bullish Demand Block Reversal Zone" : "Neutral Order Block";
+      item.liquiditySweep = rsiVal <= 30 ? "Liquidity Sweep Completed below Support" : "Building Sell-side Liquidity";
+      item.supportResistance = `Demand Support Pool: ${(p * 0.998).toFixed(2)}`;
+      item.resistance = `Supply Resistance Ceiling: ${(p * 1.005).toFixed(2)}`;
+      item.candlestickPattern = rsiVal <= 32 ? "Institutional Bullish Pin Bar" : "Consolidation Range Candle";
+    } else if (isCrash) {
+      item.fibonacci = rsiVal >= 65 ? "0.786 - OTE Golden Zone Active" : "0.50 Premium Zone";
+      item.orderBlock = rsiVal >= 65 ? "Bearish Supply Block Reversal Zone" : "Neutral Order Block";
+      item.liquiditySweep = rsiVal >= 70 ? "Liquidity Sweep Completed above Resistance" : "Building Buy-side Liquidity";
+      item.supportResistance = `Demand Support Level: ${(p * 0.995).toFixed(2)}`;
+      item.resistance = `Supply Resistance Pool: ${(p * 1.002).toFixed(2)}`;
+      item.candlestickPattern = rsiVal >= 68 ? "Institutional Bearish Engulfing" : "Consolidation Range Candle";
+    }
+
+    // Spike / Drop Logic for Deriv
+    if (item.broker === 'Deriv') {
       if (isBoom) {
         if (rsiVal <= 28.0) {
           item.score = 4.9;
           item.trend = "STRONG SPIKE ZONE";
           item.suggestion = `⚡ [${cleanSymbol} BUY SPIKE ACTIVE]: Oversold Zone! High Probability Buy Spike`;
         } else if (rsiVal <= 38.0) {
-          item.score = 3.8;
-          item.trend = "SPIKE SETUP BUILDING";
-          item.suggestion = `⏳ [${cleanSymbol} WATCHLIST]: Approaching Spike Support Zone`;
+          item.score = 3.9;
+          item.trend = "PRE-SPIKE SETUP (3-5 MINS)";
+          item.suggestion = `⏳ [${cleanSymbol} EARLY WARNING]: Approaching Spike Support Zone`;
         } else {
           item.score = 2.0;
           item.trend = "MONITORING";
@@ -180,9 +169,9 @@ app.post('/api/update-feed', (req, res) => {
           item.trend = "STRONG DROP ZONE";
           item.suggestion = `⚡ [${cleanSymbol} SELL DROP ACTIVE]: Overbought Zone! High Probability Sell Drop`;
         } else if (rsiVal >= 62.0) {
-          item.score = 3.8;
-          item.trend = "DROP SETUP BUILDING";
-          item.suggestion = `⏳ [${cleanSymbol} WATCHLIST]: Approaching Drop Resistance Zone`;
+          item.score = 3.9;
+          item.trend = "PRE-DROP SETUP (3-5 MINS)";
+          item.suggestion = `⏳ [${cleanSymbol} EARLY WARNING]: Approaching Drop Resistance Zone`;
         } else {
           item.score = 2.0;
           item.trend = "MONITORING";
