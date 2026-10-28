@@ -9,7 +9,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve Static Frontend HTML Files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
@@ -17,7 +16,6 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
-// Firebase Admin Setup
 if (!admin.apps.length) {
   try {
     const rawAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -26,45 +24,34 @@ if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
-      console.log("✅ Firebase Admin SDK Initialized Successfully!");
-    } else {
-      console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT environment variable is missing!");
     }
   } catch (error) {
-    console.error("❌ Firebase Admin Initialization Error:", error);
+    console.error("❌ Firebase Initialization Error:", error);
   }
 }
 
-// Global Market State Tracker & Subscriptions Storage
 let latestMarketState = {};
 let subscribedTokens = new Set();
 let lastNotifiedState = {};
-
-// 🎯 Track the VERY FIRST activation timestamp per symbol
 let signalActivatedTimes = {};
 
-// Keep-Alive Endpoint for Cron-job.org
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Fetch current state
 app.get('/api/state', (req, res) => {
   res.json(latestMarketState);
 });
 
-// 🔔 Push Notification Subscription Endpoint
 app.post('/api/subscribe-alerts', (req, res) => {
   const { token } = req.body;
   if (token) {
     subscribedTokens.add(token);
-    console.log(`✅ New FCM Push Token Subscribed! (Total Active: ${subscribedTokens.size})`);
     return res.json({ status: 'ok', message: 'Subscribed successfully' });
   }
   res.status(400).json({ error: 'Token is required' });
 });
 
-// Function to broadcast Push Notifications via Firebase Cloud Messaging (FCM)
 async function triggerPushNotification(item) {
   if (subscribedTokens.size === 0 || !admin.apps.length) return;
 
@@ -108,14 +95,12 @@ async function triggerPushNotification(item) {
   };
 
   try {
-    const response = await admin.messaging().sendEachForMulticast(message);
-    console.log(`🚀 Single FCM Alert Broadcasted for ${cleanSymbol}: ${response.successCount} successful`);
+    await admin.messaging().sendEachForMulticast(message);
   } catch (error) {
     console.error("❌ FCM Push Error:", error);
   }
 }
 
-// 📈 MT5 WebRequest Feed Endpoint
 app.post('/api/update-feed', (req, res) => {
   try {
     const item = req.body;
@@ -125,30 +110,52 @@ app.post('/api/update-feed', (req, res) => {
 
     const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const scoreNum = Number(item.score || 0);
-    const trendStr = String(item.trend || '').toUpperCase();
-    const suggestionStr = String(item.suggestion || '').toUpperCase();
+    const rsiVal = Number(item.rsi || 50);
     const currentTime = Date.now();
 
-    const isSignalActive = scoreNum >= 4.3 || 
-                           trendStr.includes('STRONG') || 
-                           suggestionStr.includes('ACTIVE') ||
-                           suggestionStr.includes('BREAKOUT');
+    // 🪙 XAUUSD (Gold) Specific Institutional SMC Logic
+    if (cleanSymbol === 'XAUUSD') {
+      item.broker = 'IC Markets';
+      if (rsiVal <= 32.0) {
+        item.score = 4.9;
+        item.trend = "STRONG BULLISH SMC";
+        item.suggestion = "⚡ [GOLD BUY ACTIVE]: Institutional Liquidity Sweep + Order Block Reversal!";
+      } else if (rsiVal >= 68.0) {
+        item.score = 4.9;
+        item.trend = "STRONG BEARISH SMC";
+        item.suggestion = "⚡ [GOLD SELL ACTIVE]: Institutional Bearish Order Block Breakout!";
+      } else if (rsiVal > 32.0 && rsiVal < 45.0) {
+        item.score = 3.8;
+        item.trend = "BULLISH ACCUMULATION";
+        item.suggestion = "⏳ [GOLD WATCHLIST]: Bullish Liquidity Building near Support";
+      } else if (rsiVal > 55.0 && rsiVal < 68.0) {
+        item.score = 3.8;
+        item.trend = "BEARISH DISTRIBUTION";
+        item.suggestion = "⏳ [GOLD WATCHLIST]: Bearish Liquidity Building near Resistance";
+      } else {
+        item.score = 2.5;
+        item.trend = "CONSOLIDATION";
+        item.suggestion = "⏳ [GOLD MONITORING]: Range-bound Market Structure";
+      }
+    } else {
+      item.broker = 'Weltrade';
+    }
 
-    // 🎯 Lock in the original activation time
+    const isSignalActive = Number(item.score) >= 4.3 || 
+                           String(item.trend).includes('STRONG') || 
+                           String(item.suggestion).includes('ACTIVE');
+
     if (isSignalActive) {
       if (!signalActivatedTimes[cleanSymbol]) {
         signalActivatedTimes[cleanSymbol] = currentTime;
       }
     } else {
-      // Clear timestamp when signal is no longer active
       delete signalActivatedTimes[cleanSymbol];
     }
 
-    // Attach original activation timestamp to item payload
     item.firstTriggeredAt = signalActivatedTimes[cleanSymbol] || currentTime;
     latestMarketState[cleanSymbol] = item;
 
-    // Real-time Socket.io Broadcast
     io.emit('market_update', {
       symbol: cleanSymbol,
       latest: item,
@@ -164,17 +171,12 @@ app.post('/api/update-feed', (req, res) => {
   }
 });
 
-// Socket.io Connection Logic
 io.on('connection', (socket) => {
-  console.log(`⚡ Client connected to Socket.io: ${socket.id}`);
   socket.emit('market_update', { allPairs: latestMarketState });
-
-  socket.on('disconnect', () => {
-    console.log(`🔌 Client disconnected: ${socket.id}`);
-  });
+  socket.on('disconnect', () => {});
 });
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`🚀 SpikeMV Live Feed & Alert Server running on port ${PORT}`);
+  console.log(`🚀 SpikeMV Server running on port ${PORT}`);
 });
