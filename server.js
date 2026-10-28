@@ -70,19 +70,25 @@ async function triggerPushNotification(item) {
   const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const scoreNum = Number(item.score || 0);
   const trendStr = String(item.trend || '').toUpperCase();
+  const suggestionStr = String(item.suggestion || '').toUpperCase();
   const currentTime = Date.now();
 
-  // 1. Strict Signal Filter: Only Active Strong Signals (Score >= 4.5 or STRONG)
-  const isHighConviction = scoreNum >= 4.5 || trendStr.includes('STRONG');
-  if (!isHighConviction) return;
+  // 🎯 1. Direct Active Signal Check: Checks trend OR suggestion text OR score >= 4.0
+  const isSignalActive = scoreNum >= 4.0 || 
+                         trendStr.includes('STRONG') || 
+                         trendStr.includes('ACTIVE') || 
+                         suggestionStr.includes('ACTIVE') ||
+                         suggestionStr.includes('BREAKOUT');
 
-  // 2. Cooldown Logic: Prevents duplicate notifications for the same pair within 15 minutes (900,000 ms)
+  if (!isSignalActive) return;
+
+  // ⏳ 2. Smart Cooldown (3 Minutes / 180,000 ms): Prevents spam while ensuring timely alerts
   const lastAlert = lastNotifiedState[cleanSymbol];
-  if (lastAlert && (currentTime - lastAlert.time < 15 * 60 * 1000)) {
-    return; // Skip sending duplicate notification
+  if (lastAlert && (currentTime - lastAlert.time < 3 * 60 * 1000)) {
+    return; // Skip duplicate notification within 3 mins
   }
 
-  // Record this notification timestamp
+  // Record timestamp
   lastNotifiedState[cleanSymbol] = {
     time: currentTime,
     score: scoreNum
