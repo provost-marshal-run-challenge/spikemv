@@ -35,68 +35,101 @@ if (!admin.apps.length) {
   }
 }
 
-// Global Market State Tracker
+// Global Market State Tracker & Subscriptions Storage
 let latestMarketState = {};
+let subscribedTokens = new Set();
 
-// MT5 WebRequest Feed Endpoint
-app.post('/api/update-feed', (req, res) => {
-  const data = req.body;
-  if (data && data.symbol) {
-    const cleanSym = data.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    latestMarketState[cleanSym] = data;
-    
-    // Broadcast live to socket clients
-    io.emit('market_update', { symbol: cleanSym, latest: data, allPairs: latestMarketState });
-
-    // Push alert for high predictive score signals
-    if (data.score >= 4.3 && data.fcmTokens) {
-      triggerPushNotification(data, data.fcmTokens);
-    }
-  }
-  res.json({ status: 'ok', timestamp: new Date() });
+// Keep-Alive Endpoint for Cron-job.org
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// REST Endpoint for Lovable & Web Dashboard
+// Fetch current state
 app.get('/api/state', (req, res) => {
   res.json(latestMarketState);
 });
 
-// Root Health Check Route
-app.get('/health', (req, res) => {
-  res.send("SpikeMV Live Feed Engine Running!");
+// 🔔 Push Notification Subscription Endpoint
+app.post('/api/subscribe-alerts', (req, res) => {
+  const { token } = req.body;
+  if (token) {
+    subscribedTokens.add(token);
+    console.log(`✅ New FCM Push Token Subscribed! (Total Active: ${subscribedTokens.size})`);
+    return res.json({ status: 'ok', message: 'Subscribed successfully' });
+  }
+  res.status(400).json({ error: 'Token is required' });
 });
 
-// Fallback route to serve index.html for any frontend navigation
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Function to broadcast Push Notifications via Firebase Cloud Messaging (FCM)
+async function triggerPushNotification(item) {
+  if (subscribedTokens.size === 0 || !admin.apps.length) return;
+
+  const tokensArray = Array.from(subscribedTokens);
+  const scoreNum = Number(item.score || 0);
+  const isHighConviction = scoreNum >= 4.3 || (item.trend && item.trend.includes('STRONG'));
+
+  if (!isHighConviction) return;
+
+  const message = {
+    notification: {
+      title: `🚨 SpikeMV Signal: ${item.symbol}`,
+      body: `Score: ${item.score}/5.0 | ${item.suggestion || 'High Conviction Signal Active!'}`
+    },
+    data: {
+      symbol: String(item.symbol),
+      score: String(item.score),
+      trend: String(item.trend || '')
+    },
+    tokens: tokensArray
+  };
+
+  try {
+    const response = await admin.messaging().sendEachForMulticast(message);
+    console.log(`🚀 FCM Alerts Broadcasted: ${response.successCount} successful, ${response.failureCount} failed.`);
+  } catch (error) {
+    console.error("❌ FCM Push Error:", error);
+  }
+}
+
+// 📈 MT5 WebRequest Feed Endpoint
+app.post('/api/update-feed', (req, res) => {
+  try {
+    const item = req.body;
+    if (!item || !item.symbol) {
+      return res.status(400).json({ error: 'Invalid payload. Symbol required.' });
+    }
+
+    const cleanSymbol = item.symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    latestMarketState[cleanSymbol] = item;
+
+    // Real-time Socket.io Broadcast
+    io.emit('market_update', {
+      symbol: cleanSymbol,
+      latest: item,
+      allPairs: latestMarketState
+    });
+
+    // Trigger FCM Alert if signal conditions are met
+    triggerPushNotification(item);
+
+    res.status(200).json({ status: 'success', symbol: cleanSymbol });
+  } catch (err) {
+    console.error("❌ Feed Update Error:", err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 // Socket.io Connection Logic
 io.on('connection', (socket) => {
-  console.log('⚡ Client connected to Socket.io:', socket.id);
-  socket.emit('initial_state', latestMarketState);
+  console.log(`⚡ Client connected to Socket.io: ${socket.id}`);
+  
+  // Send existing state to new client immediately
+  socket.emit('market_update', { allPairs: latestMarketState });
 
   socket.on('disconnect', () => {
-    console.log('🔌 Client disconnected:', socket.id);
+    console.log(`🔌 Client disconnected: ${socket.id}`);
   });
 });
-
-async function triggerPushNotification(signalData, fcmTokens) {
-  if (!fcmTokens || fcmTokens.length === 0) return;
-  const message = {
-    notification: {
-      title: `🚨 SpikeMV Signal: ${signalData.symbol}`,
-      body: `Score: ${signalData.score} | ${signalData.suggestion || 'High Probability Active!'}`
-    },
-    tokens: fcmTokens
-  };
-  try {
-    const response = await admin.messaging().sendEachForMulticast(message);
-    console.log(`🚀 FCM Push Alerts sent: ${response.successCount} successful`);
-  } catch (error) {
-    console.error("❌ FCM Send Error:", error);
-  }
-}
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
