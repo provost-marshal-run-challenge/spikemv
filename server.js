@@ -6,10 +6,10 @@ const admin = require('firebase-admin');
 const path = require('path');
 
 const app = express();
-app.use(cors({ origin: '*' }));
+app.use(cors());
 app.use(express.json());
 
-// Public folder (index.html) serve ކުރުން
+// Serve static assets
 app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
@@ -17,138 +17,110 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
+// 1. Firebase Admin SDK Initialization
 if (!admin.apps.length) {
   try {
     const rawAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
     if (rawAccount) {
+      const serviceAccount = JSON.parse(rawAccount);
       admin.initializeApp({
-        credential: admin.credential.cert(JSON.parse(rawAccount))
+        credential: admin.credential.cert(serviceAccount)
       });
-      console.log("✅ Firebase Admin SDK Initialized");
+      console.log("✅ Firebase Admin SDK Initialized Successfully.");
     }
   } catch (error) {
-    console.error("❌ Firebase Error:", error);
+    console.error("❌ Firebase Initialization Error:", error);
   }
 }
 
+// Global In-Memory Storage
 const subscribedTokens = new Set();
 const lastNotifiedState = {};
 
-// Initial Active Data (Score >= 4.0) so UI never gets stuck on "Awaiting Feed"
-const allPairsData = {
-  "GAINX1200": { symbol: "GAINX1200", score: 4.5, price: 1200.0, rsi: 55.0, trend: "STRONG BUY", suggestion: "BUY SPIKE ACTIVE" },
-  "PAINX1200": { symbol: "PAINX1200", score: 4.2, price: 1200.0, rsi: 45.0, trend: "SETUP", suggestion: "SELL DROP ACTIVE" },
-  "BOOM600": { symbol: "BOOM600", score: 4.6, price: 600.0, rsi: 62.0, trend: "STRONG BUY", suggestion: "BUY SPIKE ACTIVE" }
-};
-
-// Seed initial memory for Active Signals
-Object.keys(allPairsData).forEach(sym => {
-  const item = allPairsData[sym];
-  if (parseFloat(item.score) >= 4.0) {
-    lastNotifiedState[sym] = {
-      time: Date.now(),
-      score: parseFloat(item.score),
-      trend: item.trend,
-      suggestion: item.suggestion,
-      price: item.price,
-      rsi: item.rsi
-    };
-  }
-});
-
-// 🔑 Valid Base64URL VAPID Key Endpoint
+// 🔑 VAPID Public Key Endpoint for Web Push
 app.get('/api/vapid-public-key', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const validKey = process.env.VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa9SkvMvKeyPublicSpikeMvDemoKeyHere1234567890ABCDEF1234567890ABC";
-  return res.json({ publicKey: validKey });
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  const publicKey = process.env.VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa9SkvMvKeyPublicSpikeMvDemoKeyHere1234567890ABCDEF";
+  return res.json({ publicKey });
 });
 
+// 📲 Push Notification Subscription Endpoint
 app.post('/api/subscribe', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const { token } = req.body;
+
   if (token) {
     subscribedTokens.add(token);
-    return res.status(200).json({ success: true });
+    console.log(`✅ New FCM Push Token Subscribed: ${token.substring(0, 15)}...`);
+    return res.status(200).json({ success: true, message: "Subscription registered successfully!" });
   }
-  return res.status(400).json({ error: "Invalid token" });
+
+  return res.status(400).json({ error: "Invalid token structure" });
 });
 
-// 📊 State / Active Signals Endpoint (Aligned with Score >= 4.0)
+// 📊 State / Feed Status Endpoint (Lovable fallback check)
 app.get('/api/state', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const currentTime = Date.now();
-  const activeSignalsList = [];
-
-  Object.keys(lastNotifiedState).forEach(symbol => {
-    const signalData = lastNotifiedState[symbol];
-    if (currentTime - signalData.time <= 30 * 60 * 1000) { // Active window 30 mins
-      activeSignalsList.push({
-        symbol: symbol,
-        score: signalData.score,
-        time: signalData.time,
-        trend: signalData.trend || 'ACTIVE SIGNAL',
-        suggestion: signalData.suggestion || '',
-        price: signalData.price || 0,
-        rsi: signalData.rsi || 0
-      });
-    }
-  });
-
-  return res.json({
-    status: "online",
-    activeSignalsCount: activeSignalsList.length,
-    activeSignals: activeSignalsList,
-    allPairs: allPairsData,
-    markets: Object.values(allPairsData)
-  });
+  return res.json({ status: "online", activeSignals: Object.keys(lastNotifiedState).length });
 });
 
-// 🚀 Feed Endpoint (Notification Threshold strictly set to Score >= 4.0)
+// 🚀 MT5 Feed Receiver & Real-time Signal Processor
 app.post('/api/update-feed', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const item = req.body;
 
   if (!item || !item.symbol) {
-    return res.status(400).json({ error: "Invalid payload" });
+    return res.status(400).json({ error: "Invalid market payload" });
   }
 
-  const cleanSymbol = String(item.symbol).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const cleanSymbol = String(item.symbol).toUpperCase().replace(/\s+/g, '');
   const scoreNum = parseFloat(item.score) || 2.0;
   const currentTime = Date.now();
+  const suggestionStr = String(item.suggestion || '').toUpperCase();
 
-  allPairsData[cleanSymbol] = item;
-  io.emit('market_update', item);
+  // Socket.io Real-Time UI Broadcast
   io.emit('market-update', item);
+  io.emit('market_update', item);
 
-  // Trigger Notification and Active Signals when Score >= 4.0
-  const isSignalActive = scoreNum >= 4.0 || (item.suggestion && (item.suggestion.includes('BUY SPIKE ACTIVE') || item.suggestion.includes('SELL DROP ACTIVE')));
+  // Signal Triggering Rules
+  const isSignalActive = scoreNum >= 4.5 || suggestionStr.includes('BUY SPIKE ACTIVE') || suggestionStr.includes('SELL DROP ACTIVE');
 
   if (isSignalActive) {
     const lastAlert = lastNotifiedState[cleanSymbol];
 
+    // Throttling: Prevent spamming within 10 minutes
     if (!lastAlert || (currentTime - lastAlert.time >= 10 * 60 * 1000)) {
+      
       lastNotifiedState[cleanSymbol] = {
         time: currentTime,
         score: scoreNum,
         trend: item.trend || '',
-        suggestion: item.suggestion || '',
-        price: item.price || 0,
-        rsi: item.rsi || 0
+        suggestion: item.suggestion || ''
       };
 
       const tokensArray = Array.from(new Set(subscribedTokens));
+
       if (tokensArray.length > 0 && admin.apps.length > 0) {
         const message = {
           notification: {
             title: `🚨 SpikeMV Signal: ${cleanSymbol}`,
             body: `Score: ${scoreNum}/5.0 | ${item.suggestion || 'High Conviction Signal Active!'}`
           },
+          data: {
+            symbol: cleanSymbol,
+            score: String(scoreNum)
+          },
           tokens: tokensArray
         };
+
         try {
-          await admin.messaging().sendEachForMulticast(message);
+          const response = await admin.messaging().sendEachForMulticast(message);
+          console.log(`✅ Push Alert Sent for ${cleanSymbol}. Success: ${response.successCount}`);
         } catch (error) {
-          console.error("FCM Error:", error);
+          console.error("❌ Firebase Multicast Error:", error);
         }
       }
     }
@@ -157,11 +129,12 @@ app.post('/api/update-feed', async (req, res) => {
   return res.status(200).json({ success: true, symbol: cleanSymbol });
 });
 
+// Catch-all route for Single Page Application
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 SpikeMV Server running on port ${PORT}`);
 });
