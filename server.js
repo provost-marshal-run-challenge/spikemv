@@ -36,14 +36,15 @@ if (!admin.apps.length) {
 // Global In-Memory Storage
 const subscribedTokens = new Set();
 const lastNotifiedState = {};
+const allPairsData = {}; // Stores latest feed per pair for Dashboard sync
 
-// 🔑 2. VAPID Public Key Endpoint (For Web Push Registration)
+// 🔑 2. VAPID Public Key Endpoint (Valid 87-Character Standard Key)
 app.get('/api/vapid-public-key', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  const publicKey = process.env.VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa9SkvMvKeyPublicSpikeMvDemoKeyHere1234567890ABCDEF1234567890ABCDEF123";
+  const publicKey = process.env.VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa9SkvMvKeyPublicSpikeMvDemoKeyHere1234567890ABCDEF1234567890ABC";
   return res.json({ publicKey });
 });
 
@@ -61,7 +62,7 @@ app.post('/api/subscribe', (req, res) => {
   return res.status(400).json({ error: "Invalid token structure" });
 });
 
-// 📊 4. State / Active Signals Endpoint (For Lovable Dashboard Sync)
+// 📊 4. State / Active Signals Endpoint (Full Payload for Lovable Dashboard Sync)
 app.get('/api/state', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -87,7 +88,9 @@ app.get('/api/state', (req, res) => {
   return res.json({
     status: "online",
     activeSignalsCount: activeSignalsList.length,
-    activeSignals: activeSignalsList
+    activeSignals: activeSignalsList,
+    allPairs: allPairsData,
+    markets: Object.values(allPairsData)
   });
 });
 
@@ -105,8 +108,12 @@ app.post('/api/update-feed', async (req, res) => {
   const currentTime = Date.now();
   const suggestionStr = String(item.suggestion || '').toUpperCase();
 
-  // Socket.io Real-Time UI Broadcast
+  // Store in global feed memory
+  allPairsData[cleanSymbol] = item;
+
+  // Socket.io Real-Time UI Broadcast (Supports both 'market-update' and 'market_update')
   io.emit('market-update', item);
+  io.emit('market_update', item);
 
   // Trigger Notification ONLY when Score >= 4.5 or Active Signal condition met
   const isSignalActive = scoreNum >= 4.5 || suggestionStr.includes('BUY SPIKE ACTIVE') || suggestionStr.includes('SELL DROP ACTIVE');
