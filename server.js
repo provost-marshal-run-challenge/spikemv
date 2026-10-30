@@ -16,25 +16,17 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
-// Global Storage with initial Pairs data so polling is never empty
-const allPairsData = {
-  "GAINX1200": { symbol: "GAINX1200", score: 4.5, price: 1200.0, rsi: 55.0, trend: "STRONG BUY", suggestion: "BUY SPIKE ACTIVE" },
-  "PAINX1200": { symbol: "PAINX1200", score: 4.2, price: 1200.0, rsi: 45.0, trend: "SETUP", suggestion: "SELL DROP ACTIVE" },
-  "BOOM600": { symbol: "BOOM600", score: 4.6, price: 600.0, rsi: 62.0, trend: "STRONG BUY", suggestion: "BUY SPIKE ACTIVE" },
-  "CRASH1000": { symbol: "CRASH1000", score: 3.8, price: 1000.0, rsi: 48.0, trend: "MONITORING", suggestion: "WAIT FOR SETUP" }
-};
+const allPairsData = {};
 
-// 📊 State Endpoint (Guaranteed payload for Lovable Dashboard)
+// 📊 State Endpoint (Returns pairs along with full SMC structure)
 app.get('/api/state', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  
   const pairsList = Object.values(allPairsData);
-  const activeSignals = pairsList.filter(p => parseFloat(p.score) >= 4.0);
-
+  
   return res.json({
     status: "online",
-    activeSignalsCount: activeSignals.length,
-    activeSignals: activeSignals,
+    activeSignalsCount: pairsList.length,
+    activeSignals: pairsList.filter(p => parseFloat(p.score) >= 4.0),
     allPairs: allPairsData,
     markets: pairsList
   });
@@ -46,14 +38,18 @@ app.post('/api/update-feed', (req, res) => {
   const item = req.body;
 
   if (!item || !item.symbol) {
-    return res.status(400).json({ error: "Invalid market payload" });
+    return res.status(400).json({ error: "Invalid payload" });
   }
 
-  // Symbol Name Clean-up (BOOM600INDEX -> BOOM600)
+  // Normalize Symbol Names (e.g. BOOM600INDEX -> BOOM600)
   let cleanSymbol = String(item.symbol).toUpperCase().replace(/\s+/g, '').replace('INDEX', '');
   item.symbol = cleanSymbol;
 
-  allPairsData[cleanSymbol] = item;
+  // Save full tick data including SMC breakdown
+  allPairsData[cleanSymbol] = {
+    ...item,
+    time: Date.now()
+  };
 
   io.emit('market-update', item);
   io.emit('market_update', item);
