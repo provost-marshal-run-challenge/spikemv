@@ -17,19 +17,29 @@ const io = new Server(server, {
 
 const allPairsData = {};
 
+// GET API State Endpoint
 app.get('/api/state', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  const now = Date.now();
   const pairsList = Object.values(allPairsData);
-  
+
+  // Filter Active Signals (Exact Score 5.0) & Watchlist (Score 4.0 - 4.9)
+  // Remove signals older than 30 minutes (1800000 ms) automatically
+  const activeSignals = pairsList.filter(p => parseFloat(p.score) === 5.0 && (now - p.lastUpdated) < 1800000);
+  const watchlistSignals = pairsList.filter(p => parseFloat(p.score) >= 4.0 && parseFloat(p.score) < 5.0 && (now - p.lastUpdated) < 1800000);
+
   return res.json({
     status: "online",
-    activeSignalsCount: pairsList.length,
-    activeSignals: pairsList.filter(p => parseFloat(p.score) >= 4.0),
+    activeSignalsCount: activeSignals.length,
+    watchlistSignalsCount: watchlistSignals.length,
+    activeSignals: activeSignals,
+    watchlist: watchlistSignals,
     allPairs: allPairsData,
     markets: pairsList
   });
 });
 
+// POST Endpoint for EA Updates
 app.post('/api/update-feed', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const item = req.body;
@@ -38,10 +48,16 @@ app.post('/api/update-feed', (req, res) => {
     return res.status(400).json({ error: "Invalid payload" });
   }
 
+  // Clean symbol name (e.g., BOOM600INDEX -> BOOM600, GAINX1200)
   let cleanSymbol = String(item.symbol).toUpperCase().replace(/\s+/g, '').replace('INDEX', '');
   item.symbol = cleanSymbol;
 
-  // Flatten & map matrix payload if sent individually or as array
+  // Preserve initial signal post timestamp across page refreshes
+  const existingRecord = allPairsData[cleanSymbol];
+  const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const firstPostedTime = existingRecord?.firstPostedTime || item.postedTime || nowTime;
+
+  // Flatten & map matrix payload
   const matrixArray = item.matrix || [
     item.tfM1 || 'BUY',
     item.tfM5 || 'BUY',
@@ -53,6 +69,7 @@ app.post('/api/update-feed', (req, res) => {
     item.tfW1 || 'BUY'
   ];
 
+  // Map SMC structure
   const smcObject = item.smc || {
     fibonacci: item.fibLevel || '50.0% Equilibrium Zone',
     orderBlock: item.orderBlock || 'Active Zone',
@@ -64,13 +81,18 @@ app.post('/api/update-feed', (req, res) => {
     squeeze: item.channel || 'Compression'
   };
 
+  // Construct updated record with Stop Loss Range & Post Time
   allPairsData[cleanSymbol] = {
     ...item,
+    symbol: cleanSymbol,
+    stopLoss: item.stopLoss || item.sl || (item.price * 0.995).toFixed(2),
+    firstPostedTime: firstPostedTime,
     matrix: matrixArray,
     smc: smcObject,
-    time: Date.now()
+    lastUpdated: Date.now()
   };
 
+  // Broadcast to Socket.io clients
   io.emit('market-update', allPairsData[cleanSymbol]);
   io.emit('market_update', allPairsData[cleanSymbol]);
 
