@@ -52,10 +52,19 @@ app.post('/api/update-feed', (req, res) => {
   let cleanSymbol = String(item.symbol).toUpperCase().replace(/\s+/g, '').replace('INDEX', '');
   item.symbol = cleanSymbol;
 
-  // Preserve initial signal post timestamp across page refreshes
   const existingRecord = allPairsData[cleanSymbol];
-  const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const firstPostedTime = existingRecord?.firstPostedTime || item.postedTime || nowTime;
+  const newScore = parseFloat(item.score || 2.0);
+  const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  // 💡 FIXED TIMESTAMP LOCK LOGIC
+  let firstPostedTime = nowTime;
+
+  if (existingRecord && parseFloat(existingRecord.score) >= 4.0 && newScore >= 4.0) {
+    // If signal is still active/watchlist, keep the original locked timestamp!
+    firstPostedTime = existingRecord.firstPostedTime || existingRecord.postedTime || nowTime;
+  } else if (item.firstPostedTime) {
+    firstPostedTime = item.firstPostedTime;
+  }
 
   // Flatten & map matrix payload
   const matrixArray = item.matrix || [
@@ -81,12 +90,14 @@ app.post('/api/update-feed', (req, res) => {
     squeeze: item.channel || 'Compression'
   };
 
-  // Construct updated record with Stop Loss Range & Post Time
+  // Construct updated record with Stop Loss Range & Locked Post Time
   allPairsData[cleanSymbol] = {
     ...item,
     symbol: cleanSymbol,
+    score: newScore,
     stopLoss: item.stopLoss || item.sl || (item.price * 0.995).toFixed(2),
     firstPostedTime: firstPostedTime,
+    postedTime: firstPostedTime,
     matrix: matrixArray,
     smc: smcObject,
     lastUpdated: Date.now()
@@ -96,7 +107,7 @@ app.post('/api/update-feed', (req, res) => {
   io.emit('market-update', allPairsData[cleanSymbol]);
   io.emit('market_update', allPairsData[cleanSymbol]);
 
-  return res.status(200).json({ success: true, symbol: cleanSymbol });
+  return res.status(200).json({ success: true, symbol: cleanSymbol, firstPostedTime: firstPostedTime });
 });
 
 app.get('*', (req, res) => {
