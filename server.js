@@ -18,24 +18,20 @@ const io = new Server(server, {
 const allPairsData = {};
 
 /**
- * 💡 Price Zone / SL Invalidation Check
- * Checks if the price has broken the expected structure area.
+ * Price Zone Invalidation Check (Active Signal & Watchlist Range Check)
  */
-function isAreaBroken(livePrice, stopLossPrice, tradeType) {
-  if (!livePrice || !stopLossPrice) return false;
-  
-  const price = parseFloat(livePrice);
-  const sl = parseFloat(stopLossPrice);
+function isRangeExpired(livePrice, minPrice, maxPrice, tradeType) {
+  if (!livePrice || !minPrice || !maxPrice) return false;
+  const p = parseFloat(livePrice);
+  const minP = parseFloat(minPrice);
+  const maxP = parseFloat(maxPrice);
   const type = String(tradeType || '').toUpperCase();
 
-  // BUY Pair: If Price drops below SL -> Zone Broken
-  if (type.includes('BUY') && price < sl) {
-    return true;
-  }
-  // SELL Pair: If Price rises above SL -> Zone Broken
-  if (type.includes('SELL') && price > sl) {
-    return true;
-  }
+  // BUY Pair: Price falls below min range limit -> Expired
+  if (type.includes('BUY') && p < minP) return true;
+  // SELL Pair: Price exceeds max range limit -> Expired
+  if (type.includes('SELL') && p > maxP) return true;
+
   return false;
 }
 
@@ -45,14 +41,14 @@ app.get('/api/state', (req, res) => {
   const now = Date.now();
   const pairsList = Object.values(allPairsData);
 
-  // Filter Active Signals (Exact Score 5.0) & Watchlist (Score 4.5 - 4.9)
-  // Remove signals older than 30 minutes (1800000 ms) automatically
+  // Active Signals: Score 5.0
   const activeSignals = pairsList.filter(
     p => parseFloat(p.score) === 5.0 && (now - p.lastUpdated) < 1800000
   );
   
+  // Watchlist Signals: Score 4.5 - 4.9 & Active Range (Valid for 15 Mins / 900,000 ms)
   const watchlistSignals = pairsList.filter(
-    p => parseFloat(p.score) >= 4.5 && parseFloat(p.score) <= 4.9 && (now - p.lastUpdated) < 1800000
+    p => parseFloat(p.score) >= 4.5 && parseFloat(p.score) <= 4.9 && (now - p.lastUpdated) < 900000
   );
 
   return res.json({
@@ -75,98 +71,49 @@ app.post('/api/update-feed', (req, res) => {
     return res.status(400).json({ error: "Invalid payload" });
   }
 
-  // Clean symbol name (e.g., BOOM600INDEX -> BOOM600, GAINX1200)
   let cleanSymbol = String(item.symbol).toUpperCase().replace(/\s+/g, '').replace('INDEX', '');
   item.symbol = cleanSymbol;
 
-  const existingRecord = allPairsData[cleanSymbol];
-  let newScore = parseFloat(item.score || 2.0);
   const livePrice = parseFloat(item.price || item.livePrice || 0);
   const tradeType = item.type || item.tradeType || 'BUY';
-  const stopLoss = item.stopLoss || item.sl || (livePrice * 0.995).toFixed(2);
+  let newScore = parseFloat(item.score || 2.0);
 
-  // 💡 INVALIDATION CHECK: If Price broke Expected Area / SL -> Force Score to 2.0 (MONITORING / EXPIRED)
-  if (isAreaBroken(livePrice, stopLoss, tradeType)) {
-    newScore = 2.0;
+  // Range for Watchlist Entry (Estimated 10-15 Min Zone)
+  const minRange = item.minRange || (tradeType === 'BUY' ? (livePrice * 0.998).toFixed(2) : livePrice.toFixed(2));
+  const maxRange = item.maxRange || (tradeType === 'BUY' ? livePrice.toFixed(2) : (livePrice * 1.002).toFixed(2));
+  const stopLoss = item.stopLoss || item.sl || (tradeType === 'BUY' ? (livePrice * 0.996).toFixed(2) : (livePrice * 1.004).toFixed(2));
+
+  // Invalidation / Expired Check
+  if (isRangeExpired(livePrice, minRange, maxRange, tradeType)) {
+    newScore = 2.0; // Force remove from Watchlist & Active
   }
 
-  const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  // Calculate Probability Percentage (for Watchlist Display)
+  let spikeProbability = "75%";
+  if (newScore === 5.0) spikeProbability = "95%";
+  else if (newScore >= 4.8) spikeProbability = "88%";
+  else if (newScore >= 4.5) spikeProbability = "80%";
 
-  // FIXED TIMESTAMP LOCK LOGIC
-  let firstPostedTime = nowTime;
-
-  if (existingRecord && parseFloat(existingRecord.score) >= 4.5 && newScore >= 4.5) {
-    // If signal remains in Watchlist/Active zone, keep original locked timestamp
-    firstPostedTime = existingRecord.firstPostedTime || existingRecord.postedTime || nowTime;
-  } else if (item.firstPostedTime) {
-    firstPostedTime = item.firstPostedTime;
-  }
-
-  // Flatten & map matrix payload
-  const matrixArray = item.matrix || [
-    item.tfM1 || 'BUY',
-    item.tfM5 || 'BUY',
-    item.tfM15 || 'BUY',
-    item.tfM30 || 'BUY',
-    item.tfH1 || 'BUY',
-    item.tfH4 || 'BUY',
-    item.tfD1 || 'BUY',
-    item.tfW1 || 'BUY'
-  ];
-
-  // Map SMC structure
-  const smcObject = item.smc || {
-    fibonacci: item.fibLevel || '50.0% Equilibrium Zone',
-    orderBlock: item.orderBlock || 'Active Zone',
-    liquiditySweep: item.liquiditySweep || 'Building Liquidity',
-    supportResistance: item.supRes || 'In Range',
-    resistance: item.resistance || 'High Level',
-    candlestick: item.candlePattern || 'Consolidation',
-    trendlines: item.trendline || 'Channel Active',
-    squeeze: item.channel || 'Compression'
-  };
-
-  // Determine Recommendation Message dynamically based on Score
-  let recommendationMsg = item.recommendation || item.message;
-  if (!recommendationMsg) {
-    if (newScore === 5.0) {
-      recommendationMsg = `⚡ [${cleanSymbol} ACTIVE]: High Precision Setup Confirmed!`;
-    } else if (newScore >= 4.5) {
-      recommendationMsg = `⏳ [${cleanSymbol} WATCHLIST]: Approaching High Confluence Support/Resistance Zone`;
-    } else {
-      recommendationMsg = `🔍 [${cleanSymbol} MONITORING]: No clear setup yet. Stay patient.`;
-    }
-  }
-
-  // Construct updated record
   allPairsData[cleanSymbol] = {
     ...item,
     symbol: cleanSymbol,
     price: livePrice,
     score: newScore,
+    minRange: minRange,
+    maxRange: maxRange,
     stopLoss: stopLoss,
-    recommendation: recommendationMsg,
-    firstPostedTime: firstPostedTime,
-    postedTime: firstPostedTime,
-    matrix: matrixArray,
-    smc: smcObject,
+    spikeProbability: spikeProbability,
+    tradeType: tradeType,
     lastUpdated: Date.now()
   };
 
-  // Broadcast to Socket.io clients instantly
   io.emit('market-update', allPairsData[cleanSymbol]);
-  io.emit('market_update', allPairsData[cleanSymbol]);
 
   return res.status(200).json({ 
     success: true, 
     symbol: cleanSymbol, 
-    score: newScore,
-    firstPostedTime: firstPostedTime 
+    score: newScore 
   });
-});
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
