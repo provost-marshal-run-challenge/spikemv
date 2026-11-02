@@ -1,52 +1,52 @@
-// WatchlistSection.jsx - Final Component
+// WatchlistSection.jsx - Final Updated Component
 import React from 'react';
 
 const WatchlistSection = ({ signals = [], onSelectPair }) => {
-  // Safe filtering: Check score range 4.5 to 4.9 directly or status WATCHLIST
   const watchlistItems = signals.filter((item) => {
     const scoreVal = parseFloat(item.score);
-    return (scoreVal >= 4.5 && scoreVal <= 4.9) || item.status === 'WATCHLIST';
+    return scoreVal >= 4.5 && scoreVal <= 4.9;
   });
 
   return (
     <div className="w-full space-y-4">
-      <h2 className="text-xl font-bold text-white mb-2">Watchlist (4.5 - 4.9)</h2>
+      <h2 className="text-xl font-bold text-amber-400 mb-2">Watchlist (Pre-Spike Zones)</h2>
 
       {watchlistItems.length === 0 ? (
         <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 text-center">
-          No pairs currently in Watchlist range.
+          No pairs currently approaching spike zone.
         </div>
       ) : (
         watchlistItems.map((item) => {
-          const livePrice = item.price || item.livePrice || '0.00';
-          const stopLoss = item.stopLoss || item.slRange || '0.00';
-          const scoreDisplay = typeof item.score === 'number' ? item.score.toFixed(1) : item.score;
+          const livePrice = item.price || '0.00';
+          const minRange = item.minRange || '0.00';
+          const maxRange = item.maxRange || '0.00';
+          const probability = item.spikeProbability || '80%';
 
           return (
             <div 
               key={item.symbol} 
-              className="p-4 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl transition-all"
+              className="p-4 bg-slate-900 border border-amber-500/20 hover:border-amber-500/40 rounded-xl transition-all"
             >
               <div className="flex justify-between items-center mb-2">
                 <span className="font-extrabold text-white text-lg">{item.symbol}</span>
-                <span className="px-2.5 py-1 text-xs font-bold text-amber-400 bg-amber-400/10 rounded-full border border-amber-400/20">
-                  Score: {scoreDisplay}/5.0
+                <span className="px-3 py-1 text-xs font-black text-amber-300 bg-amber-500/20 rounded-full border border-amber-400/30">
+                  ⚡ Spike Chance: {probability}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-sm text-slate-300 mb-3">
                 <div>
                   <span className="text-slate-500 block text-xs">Live Price</span>
-                  <span className="font-mono text-white">{livePrice}</span>
+                  <span className="font-mono text-white font-semibold">{livePrice}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-xs">SL Range</span>
-                  <span className="font-mono text-red-400">{stopLoss}</span>
+                  <span className="text-slate-500 block text-xs">Possible Spike Range (10-15 Min)</span>
+                  <span className="font-mono text-amber-400 font-bold">{minRange} - {maxRange}</span>
                 </div>
               </div>
 
               <div className="p-2.5 bg-slate-950/60 rounded-lg text-xs text-amber-300 border border-amber-500/10 mb-3">
-                {item.recommendation || `⏳ [${item.symbol} WATCHLIST]: Approaching Support/Resistance Zone`}
+                ⏳ High probability spike area detected within this price range. Stay alert!
               </div>
 
               <button
