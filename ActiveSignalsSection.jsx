@@ -1,8 +1,12 @@
-// ActiveSignalsSection.jsx - Final Updated Component
+// ActiveSignalsSection.jsx - Entry Confirmed UI
 import React from 'react';
 
 const ActiveSignalsSection = ({ signals = [], onSelectPair }) => {
-  const activeItems = signals.filter((item) => parseFloat(item.score) === 5.0);
+  // Safe filtering for Score 5.0 (Active Signal)
+  const activeItems = signals.filter((item) => {
+    const scoreVal = parseFloat(item.score);
+    return scoreVal === 5.0 || item.status === 'ACTIVE_SIGNAL';
+  });
 
   return (
     <div className="w-full space-y-4">
@@ -14,8 +18,8 @@ const ActiveSignalsSection = ({ signals = [], onSelectPair }) => {
         </div>
       ) : (
         activeItems.map((item) => {
-          const livePrice = item.price || '0.00';
-          const stopLoss = item.stopLoss || '0.00';
+          const livePrice = item.price || item.livePrice || '0.00';
+          const stopLoss = item.stopLoss || item.sl || '0.00';
 
           return (
             <div 
@@ -41,7 +45,7 @@ const ActiveSignalsSection = ({ signals = [], onSelectPair }) => {
               </div>
 
               <div className="p-2.5 bg-emerald-900/30 rounded-lg text-xs text-emerald-200 border border-emerald-500/20 mb-3">
-                ⚡ Setup confirmed! Execute trade within specified SL management.
+                {item.suggestion || item.recommendation || `⚡ Setup confirmed! Execute trade with strict risk management.`}
               </div>
 
               <button
