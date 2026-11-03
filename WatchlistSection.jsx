@@ -1,10 +1,9 @@
-// WatchlistSection.jsx - Dynamic Probability & Locked Zone UI
 import React from 'react';
 
 const WatchlistSection = ({ signals = [], onSelectPair }) => {
-  // Filter ONLY Watchlist status (Score 4.5 - 4.9)
+  // Filter ONLY Watchlist status (Score 4.5 - 4.9) with safe float precision
   const watchlistItems = signals.filter((item) => {
-    const scoreVal = parseFloat(item.score);
+    const scoreVal = Math.round(parseFloat(item.score || 0) * 10) / 10;
     return scoreVal >= 4.5 && scoreVal <= 4.9;
   });
 
