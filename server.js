@@ -41,14 +41,17 @@ app.get('/api/state', (req, res) => {
   const now = Date.now();
   const pairsList = Object.values(allPairsData);
 
-  // Active Signals: Score 5.0
+  // Active Signals: Score 5.0 (Valid for 30 Mins / 1,800,000 ms)
   const activeSignals = pairsList.filter(
-    p => parseFloat(p.score) === 5.0 && (now - p.lastUpdated) < 1800000
+    p => Math.round(parseFloat(p.score) * 10) / 10 === 5.0 && (now - p.lastUpdated) < 1800000
   );
   
-  // Watchlist Signals: Score 4.5 - 4.9 & Active Range (Valid for 15 Mins / 900,000 ms)
+  // Watchlist Signals: Score 4.5 - 4.9 (Valid for 15 Mins / 900,000 ms)
   const watchlistSignals = pairsList.filter(
-    p => parseFloat(p.score) >= 4.5 && parseFloat(p.score) <= 4.9 && (now - p.lastUpdated) < 900000
+    p => {
+      const s = Math.round(parseFloat(p.score) * 10) / 10;
+      return s >= 4.5 && s <= 4.9 && (now - p.lastUpdated) < 900000;
+    }
   );
 
   return res.json({
@@ -79,7 +82,11 @@ app.post('/api/update-feed', (req, res) => {
   const tradeType = item.type || item.tradeType || 'BUY';
   const existingRecord = allPairsData[cleanSymbol];
 
-  // 💡 RANGE LOCK LOGIC: Live Price ބަދަލުވިޔަސް ކުރިން ފޮނުވި minRange އާއި maxRange 15 މިނެޓަށް Lock ކުރުން
+  // Clean Score Parsing (Prevents float precision bugs like 5.0000003)
+  let rawScore = parseFloat(item.score || 2.0);
+  let newScore = Math.round(rawScore * 10) / 10;
+
+  // 💡 RANGE LOCK LOGIC: Lock minRange & maxRange for 15 mins
   let minRange = item.minRange;
   let maxRange = item.maxRange;
 
@@ -89,18 +96,18 @@ app.post('/api/update-feed', (req, res) => {
   }
 
   const stopLoss = item.stopLoss || item.sl || (tradeType === 'BUY' ? (livePrice * 0.996).toFixed(2) : (livePrice * 1.004).toFixed(2));
-  let newScore = parseFloat(item.score || 2.0);
 
-  // 💡 RANGE BREAKOUT CHECK: Range އިން ބޭރުވެއްޖެނަމަ Score 1.0 އަށް ތިރިކޮށް Auto-Remove ކުރުން
+  // 💡 RANGE BREAKOUT CHECK: Break out of range -> Set score 1.0 (Auto-Remove)
   if (isRangeExpired(livePrice, minRange, maxRange, tradeType)) {
     newScore = 1.0; 
   }
 
-  // Calculate Dynamic Probability Percentage
+  // Dynamic Spike Probability
   let spikeProbability = item.spikeProbability;
-  if (!spikeProbability) {
-    if (newScore === 5.0) spikeProbability = "95%";
-    else if (newScore >= 4.8) spikeProbability = "88%";
+  if (newScore === 5.0) {
+    spikeProbability = "95%";
+  } else if (!spikeProbability) {
+    if (newScore >= 4.8) spikeProbability = "88%";
     else if (newScore >= 4.5) spikeProbability = "78%";
     else spikeProbability = "60%";
   }
@@ -119,7 +126,7 @@ app.post('/api/update-feed', (req, res) => {
     lastUpdated: Date.now()
   };
 
-  // Broadcast to Socket.io clients instantly
+  // Broadcast via Socket.io
   io.emit('market-update', allPairsData[cleanSymbol]);
 
   return res.status(200).json({ 
