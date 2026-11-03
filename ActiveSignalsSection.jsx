@@ -1,10 +1,10 @@
-// ActiveSignalsSection.jsx - Entry Confirmed UI
 import React from 'react';
 
 const ActiveSignalsSection = ({ signals = [], onSelectPair }) => {
-  // Safe filtering for Score 5.0 (Active Signal)
+  // Safe filtering for Score 5.0 (Active Signal) with Float Precision Normalization
   const activeItems = signals.filter((item) => {
-    const scoreVal = parseFloat(item.score);
+    const rawScore = parseFloat(item.score || 0);
+    const scoreVal = Math.round(rawScore * 10) / 10;
     return scoreVal === 5.0 || item.status === 'ACTIVE_SIGNAL';
   });
 
