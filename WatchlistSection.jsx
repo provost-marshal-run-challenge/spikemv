@@ -1,59 +1,58 @@
-// WatchlistSection.jsx - Final Updated Component
+// ActiveSignalsSection.jsx - Entry Confirmed UI
 import React from 'react';
 
-const WatchlistSection = ({ signals = [], onSelectPair }) => {
-  const watchlistItems = signals.filter((item) => {
+const ActiveSignalsSection = ({ signals = [], onSelectPair }) => {
+  // Safe filtering for Score 5.0 (Active Signal)
+  const activeItems = signals.filter((item) => {
     const scoreVal = parseFloat(item.score);
-    return scoreVal >= 4.5 && scoreVal <= 4.9;
+    return scoreVal === 5.0 || item.status === 'ACTIVE_SIGNAL';
   });
 
   return (
     <div className="w-full space-y-4">
-      <h2 className="text-xl font-bold text-amber-400 mb-2">Watchlist (Pre-Spike Zones)</h2>
+      <h2 className="text-xl font-bold text-emerald-400 mb-2">Active Signals (Entry Confirmed)</h2>
 
-      {watchlistItems.length === 0 ? (
+      {activeItems.length === 0 ? (
         <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 text-center">
-          No pairs currently approaching spike zone.
+          No active signals right now.
         </div>
       ) : (
-        watchlistItems.map((item) => {
-          const livePrice = item.price || '0.00';
-          const minRange = item.minRange || '0.00';
-          const maxRange = item.maxRange || '0.00';
-          const probability = item.spikeProbability || '80%';
+        activeItems.map((item) => {
+          const livePrice = item.price || item.livePrice || '0.00';
+          const stopLoss = item.stopLoss || item.sl || '0.00';
 
           return (
             <div 
               key={item.symbol} 
-              className="p-4 bg-slate-900 border border-amber-500/20 hover:border-amber-500/40 rounded-xl transition-all"
+              className="p-4 bg-emerald-950/20 border border-emerald-500/40 hover:border-emerald-500/70 rounded-xl transition-all"
             >
               <div className="flex justify-between items-center mb-2">
                 <span className="font-extrabold text-white text-lg">{item.symbol}</span>
-                <span className="px-3 py-1 text-xs font-black text-amber-300 bg-amber-500/20 rounded-full border border-amber-400/30">
-                  ⚡ Spike Chance: {probability}
+                <span className="px-3 py-1 text-xs font-black text-emerald-400 bg-emerald-400/20 rounded-full border border-emerald-400/30 animate-pulse">
+                  ACTIVE SIGNAL ⚡
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-sm text-slate-300 mb-3">
                 <div>
-                  <span className="text-slate-500 block text-xs">Live Price</span>
-                  <span className="font-mono text-white font-semibold">{livePrice}</span>
+                  <span className="text-slate-500 block text-xs">Live Entry Price</span>
+                  <span className="font-mono text-emerald-400 font-bold">{livePrice}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-xs">Possible Spike Range (10-15 Min)</span>
-                  <span className="font-mono text-amber-400 font-bold">{minRange} - {maxRange}</span>
+                  <span className="text-slate-500 block text-xs">Tight Stop Loss (SL)</span>
+                  <span className="font-mono text-red-400 font-bold">{stopLoss}</span>
                 </div>
               </div>
 
-              <div className="p-2.5 bg-slate-950/60 rounded-lg text-xs text-amber-300 border border-amber-500/10 mb-3">
-                ⏳ High probability spike area detected within this price range. Stay alert!
+              <div className="p-2.5 bg-emerald-900/30 rounded-lg text-xs text-emerald-200 border border-emerald-500/20 mb-3">
+                {item.suggestion || item.recommendation || `⚡ Setup confirmed! Execute trade with strict risk management.`}
               </div>
 
               <button
                 onClick={() => onSelectPair && onSelectPair(item.symbol)}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition"
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition"
               >
-                Full Breakdown ↗
+                Open Signal & Chart ↗
               </button>
             </div>
           );
@@ -63,4 +62,4 @@ const WatchlistSection = ({ signals = [], onSelectPair }) => {
   );
 };
 
-export default WatchlistSection;
+export default ActiveSignalsSection;
