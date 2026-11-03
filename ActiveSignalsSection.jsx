@@ -1,7 +1,7 @@
 import React from 'react';
 
 const ActiveSignalsSection = ({ signals = [], onSelectPair }) => {
-  // Safe filtering for Score 5.0 (Active Signal) with Float Precision Normalization
+  // Safe Float Precision Filtering for Score 5.0 (Active Signal)
   const activeItems = signals.filter((item) => {
     const rawScore = parseFloat(item.score || 0);
     const scoreVal = Math.round(rawScore * 10) / 10;
