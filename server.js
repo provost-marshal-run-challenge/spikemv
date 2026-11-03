@@ -27,9 +27,9 @@ function isRangeExpired(livePrice, minPrice, maxPrice, tradeType) {
   const maxP = parseFloat(maxPrice);
   const type = String(tradeType || '').toUpperCase();
 
-  // BUY Pair: Price falls below min range limit -> Expired
+  // BUY Pair: Price drops below min range limit -> Expired / Out of Zone
   if (type.includes('BUY') && p < minP) return true;
-  // SELL Pair: Price exceeds max range limit -> Expired
+  // SELL Pair: Price exceeds max range limit -> Expired / Out of Zone
   if (type.includes('SELL') && p > maxP) return true;
 
   return false;
@@ -71,29 +71,41 @@ app.post('/api/update-feed', (req, res) => {
     return res.status(400).json({ error: "Invalid payload" });
   }
 
+  // Clean symbol name (e.g. BOOM600INDEX -> BOOM600)
   let cleanSymbol = String(item.symbol).toUpperCase().replace(/\s+/g, '').replace('INDEX', '');
   item.symbol = cleanSymbol;
 
   const livePrice = parseFloat(item.price || item.livePrice || 0);
   const tradeType = item.type || item.tradeType || 'BUY';
-  let newScore = parseFloat(item.score || 2.0);
+  const existingRecord = allPairsData[cleanSymbol];
 
-  // Range for Watchlist Entry (Estimated 10-15 Min Zone)
-  const minRange = item.minRange || (tradeType === 'BUY' ? (livePrice * 0.998).toFixed(2) : livePrice.toFixed(2));
-  const maxRange = item.maxRange || (tradeType === 'BUY' ? livePrice.toFixed(2) : (livePrice * 1.002).toFixed(2));
-  const stopLoss = item.stopLoss || item.sl || (tradeType === 'BUY' ? (livePrice * 0.996).toFixed(2) : (livePrice * 1.004).toFixed(2));
+  // 💡 RANGE LOCK LOGIC: Live Price ބަދަލުވިޔަސް ކުރިން ފޮނުވި minRange އާއި maxRange 15 މިނެޓަށް Lock ކުރުން
+  let minRange = item.minRange;
+  let maxRange = item.maxRange;
 
-  // Invalidation / Expired Check
-  if (isRangeExpired(livePrice, minRange, maxRange, tradeType)) {
-    newScore = 2.0; // Force remove from Watchlist & Active
+  if (existingRecord && existingRecord.score >= 4.5 && (Date.now() - existingRecord.lastUpdated < 900000)) {
+    minRange = existingRecord.minRange || minRange;
+    maxRange = existingRecord.maxRange || maxRange;
   }
 
-  // Calculate Probability Percentage (for Watchlist Display)
-  let spikeProbability = "75%";
-  if (newScore === 5.0) spikeProbability = "95%";
-  else if (newScore >= 4.8) spikeProbability = "88%";
-  else if (newScore >= 4.5) spikeProbability = "80%";
+  const stopLoss = item.stopLoss || item.sl || (tradeType === 'BUY' ? (livePrice * 0.996).toFixed(2) : (livePrice * 1.004).toFixed(2));
+  let newScore = parseFloat(item.score || 2.0);
 
+  // 💡 RANGE BREAKOUT CHECK: Range އިން ބޭރުވެއްޖެނަމަ Score 1.0 އަށް ތިރިކޮށް Auto-Remove ކުރުން
+  if (isRangeExpired(livePrice, minRange, maxRange, tradeType)) {
+    newScore = 1.0; 
+  }
+
+  // Calculate Dynamic Probability Percentage
+  let spikeProbability = item.spikeProbability;
+  if (!spikeProbability) {
+    if (newScore === 5.0) spikeProbability = "95%";
+    else if (newScore >= 4.8) spikeProbability = "88%";
+    else if (newScore >= 4.5) spikeProbability = "78%";
+    else spikeProbability = "60%";
+  }
+
+  // Record Update
   allPairsData[cleanSymbol] = {
     ...item,
     symbol: cleanSymbol,
@@ -107,13 +119,20 @@ app.post('/api/update-feed', (req, res) => {
     lastUpdated: Date.now()
   };
 
+  // Broadcast to Socket.io clients instantly
   io.emit('market-update', allPairsData[cleanSymbol]);
 
   return res.status(200).json({ 
     success: true, 
     symbol: cleanSymbol, 
-    score: newScore 
+    score: newScore,
+    minRange: minRange,
+    maxRange: maxRange
   });
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
