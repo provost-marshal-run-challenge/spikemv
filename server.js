@@ -37,6 +37,18 @@ function isRangeExpired(livePrice, minPrice, maxPrice, tradeType) {
   return false;
 }
 
+// Railway Health Check & API State Endpoint
+app.get('/api/state', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const pairsList = Object.values(allPairsData);
+  res.status(200).json({
+    status: 'online',
+    engine: 'SpikeMV Institutional Terminal Active on Railway',
+    totalPairs: pairsList.length,
+    data: allPairsData
+  });
+});
+
 // POST Wildcard Catch-all Endpoint (Guaranteed to capture MT5 WebRequest and return 200 OK)
 app.post('*', (req, res) => {
   try {
@@ -77,18 +89,6 @@ app.post('*', (req, res) => {
   }
 });
 
-// GET API State Endpoint
-app.get('/api/state', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  const pairsList = Object.values(allPairsData);
-  res.status(200).json({
-    status: 'online',
-    engine: 'SpikeMV Institutional Terminal Active',
-    totalPairs: pairsList.length,
-    data: allPairsData
-  });
-});
-
 // Socket.io Connection
 io.on('connection', (socket) => {
   console.log(`🔌 Client connected: ${socket.id}`);
@@ -101,5 +101,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 SpikeMV Institutional Engine running on port ${PORT}`);
+  console.log(`🚀 SpikeMV Institutional Engine running on Railway port ${PORT}`);
 });
