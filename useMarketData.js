@@ -1,40 +1,42 @@
 import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
-const SOCKET_URL = 'https://spikemv.com';
+// Railway Production URL
+const SOCKET_URL = 'https://spikemv-production.up.railway.app';
 
 export const useMarketData = () => {
   const [marketData, setMarketData] = useState({});
 
   useEffect(() => {
-    // 1. Initial State Fetch (Only once or every 10-15 seconds)
+    // 1. Initial State Fetch from Railway API
     const fetchInitialState = async () => {
       try {
         const res = await fetch(`${SOCKET_URL}/api/state`);
-        const data = await res.json();
-        if (data && data.allPairs) {
-          setMarketData(data.allPairs);
+        const result = await res.json();
+        // Server sends data inside result.data
+        if (result && result.data) {
+          setMarketData(result.data);
         }
       } catch (err) {
-        console.error("Error fetching state:", err);
+        console.error("Error fetching state from Railway:", err);
       }
     };
 
     fetchInitialState();
     
-    // Polling every 10 seconds to drastically reduce Vercel Invocations
+    // Polling every 10 seconds
     const interval = setInterval(fetchInitialState, 10000);
 
-    // 2. Real-time Socket Listener (Zero CDN Requests)
+    // 2. Real-time Socket Listener connected to Railway
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling']
     });
 
-    socket.on('market-update', (updatedPair) => {
-      setMarketData((prev) => ({
-        ...prev,
-        [updatedPair.symbol]: updatedPair
-      }));
+    // Matches server io.emit('live-feed-update', allPairsData)
+    socket.on('live-feed-update', (updatedPairs) => {
+      if (updatedPairs) {
+        setMarketData(updatedPairs);
+      }
     });
 
     return () => {
