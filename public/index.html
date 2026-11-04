@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    @font-family {
+    @font-face {
       font-family: 'Faruma';
       src: url('https://cdn.jsdelivr.net/gh/muralm/dhivehi-fonts/Faruma.ttf') format('truetype');
     }
@@ -52,21 +52,35 @@
 
     <!-- Pair Selector -->
     <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl flex flex-col items-center justify-center text-center space-y-2">
-      <label class="text-amber-400 font-bold text-base sm:text-lg">Weltrade Pair Select ކުރައްވާ:</label>
+      <label class="text-amber-400 font-bold text-base sm:text-lg">Trading Pair Select ކުރައްވާ:</label>
       <select id="symbolSelect" onchange="switchSymbol(this.value)" class="w-full max-w-xs bg-slate-900 text-slate-100 font-bold px-4 py-2.5 rounded-xl border-2 border-amber-500/60 text-center text-base focus:outline-none focus:border-amber-400 cursor-pointer shadow-inner">
-        <optgroup label="📈 GainX Series">
+        <optgroup label="📈 Weltrade - GainX Series">
           <option value="GAINX400">GainX 400</option>
           <option value="GAINX600">GainX 600</option>
           <option value="GAINX800">GainX 800</option>
           <option value="GAINX999">GainX 999</option>
           <option value="GAINX1200" selected>GainX 1200</option>
         </optgroup>
-        <optgroup label="📉 PainX Series">
+        <optgroup label="📉 Weltrade - PainX Series">
           <option value="PAINX400">PainX 400</option>
           <option value="PAINX600">PainX 600</option>
           <option value="PAINX800">PainX 800</option>
           <option value="PAINX999">PainX 999</option>
           <option value="PAINX1200">PainX 1200</option>
+        </optgroup>
+        <optgroup label="💥 Deriv - Boom Series">
+          <option value="BOOM300">Boom 300</option>
+          <option value="BOOM500">Boom 500</option>
+          <option value="BOOM600">Boom 600</option>
+          <option value="BOOM900">Boom 900</option>
+          <option value="BOOM1000">Boom 1000</option>
+        </optgroup>
+        <optgroup label="📉 Deriv - Crash Series">
+          <option value="CRASH300">Crash 300</option>
+          <option value="CRASH500">Crash 500</option>
+          <option value="CRASH600">Crash 600</option>
+          <option value="CRASH900">Crash 900</option>
+          <option value="CRASH1000">Crash 1000</option>
         </optgroup>
       </select>
       <div class="text-xs text-slate-400 pt-1">
@@ -207,12 +221,15 @@
         document.getElementById('winRateVal').innerText = data.winRate || "84%";
         document.getElementById('scoreVal').innerText = `${scoreStr} / 5.0`;
 
-        updateTF('tfM1', data.tfM1 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
-        updateTF('tfM5', data.tfM5 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
-        updateTF('tfM15', data.tfM15 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
-        updateTF('tfM30', data.tfM30 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
-        updateTF('tfH1', data.tfH1 || (currentSymbol.includes('GAIN') ? 'BUY' : 'SELL'));
-        updateTF('tfH4', data.tfH4 || (currentSymbol.includes('GAIN') ? 'SELL' : 'BUY'));
+        const defaultTrend = (currentSymbol.includes('GAIN') || currentSymbol.includes('BOOM')) ? 'BUY' : 'SELL';
+        const oppTrend = (defaultTrend === 'BUY') ? 'SELL' : 'BUY';
+
+        updateTF('tfM1', data.tfM1 || defaultTrend);
+        updateTF('tfM5', data.tfM5 || defaultTrend);
+        updateTF('tfM15', data.tfM15 || defaultTrend);
+        updateTF('tfM30', data.tfM30 || defaultTrend);
+        updateTF('tfH1', data.tfH1 || defaultTrend);
+        updateTF('tfH4', data.tfH4 || oppTrend);
         updateTF('tfD1', data.tfD1 || 'BUY');
         updateTF('tfW1', data.tfW1 || 'BUY');
 
@@ -222,16 +239,15 @@
         document.getElementById('retractStatus').innerText = data.retract || "61.8% OTE Zone ގައި";
 
         // --- DIRECT ENTRY BADGE & DECISION BOX FIX ---
-        const isPain = currentSymbol.includes('PAIN');
-        const isGain = currentSymbol.includes('GAIN');
+        const isCrashOrPain = currentSymbol.includes('PAIN') || currentSymbol.includes('CRASH');
         const actionBox = document.getElementById('actionContainer');
         const trendBadge = document.getElementById('trendBadge');
 
-        const isActiveSignal = scoreNum >= 4.3 || trend.includes('STRONG') || (data.suggestion && (data.suggestion.includes('SELL DROP ACTIVE') || data.suggestion.includes('BUY SPIKE ACTIVE')));
-        const isSetup = scoreNum >= 3.5 || trend.includes('SETUP');
+        const isActiveSignal = scoreNum >= 4.3 || trend.includes('STRONG') || trend.includes('BUY⚡️') || trend.includes('SELL⚡️') || (data.suggestion && (data.suggestion.includes('ACTIVE') || data.suggestion.includes('SPIKE') || data.suggestion.includes('DROP')));
+        const isSetup = scoreNum >= 3.5 || trend.includes('SETUP') || trend.includes('WATCHLIST');
 
         if (isActiveSignal) {
-          if (isPain) {
+          if (isCrashOrPain) {
             trendBadge.className = "bg-rose-500/20 text-rose-400 text-xs px-3 py-1 rounded-full font-mono border border-rose-500/50 animate-pulse font-bold";
             trendBadge.innerText = "⚡ SELL ENTRY ACTIVE";
             actionBox.className = "p-3 rounded-xl font-bold text-center text-sm sm:text-base bg-rose-500/20 text-rose-400 border border-rose-500/50 animate-pulse";
@@ -260,8 +276,8 @@
       const el = document.getElementById(elemId);
       if(!el) return;
       el.innerText = val;
-      if (val === 'BUY') el.className = "font-bold text-emerald-400";
-      else if (val === 'SELL') el.className = "font-bold text-rose-500";
+      if (val === 'BUY' || val === 'BUY⚡️') el.className = "font-bold text-emerald-400";
+      else if (val === 'SELL' || val === 'SELL⚡️') el.className = "font-bold text-rose-500";
       else el.className = "font-bold text-slate-400";
     }
 
@@ -269,7 +285,7 @@
       let readyPairs = [];
       Object.keys(allMarketData).forEach(key => {
         const item = allMarketData[key];
-        if (item && item.trend && (item.trend.includes('STRONG') || item.trend.includes('SETUP') || (item.score && Number(item.score) >= 4.3))) {
+        if (item && item.trend && (item.trend.includes('STRONG') || item.trend.includes('SETUP') || item.trend.includes('⚡️') || (item.score && Number(item.score) >= 4.3))) {
           readyPairs.push(`🚨 [${item.symbol}]: ${item.suggestion || 'READY FOR ENTRY'}`);
         }
       });
